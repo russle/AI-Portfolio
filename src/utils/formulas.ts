@@ -53,6 +53,25 @@ export function calculateTargetAsset(expMonth: number): number {
 }
 
 /**
+ * 運用年金現值公式計算 Die to Zero (財產歸零) 法則下的退休目標資產 (單位：新台幣)
+ * Target = Expense_annual * [1 - (1 + rReal)^(-years)] / rReal
+ * 
+ * @param expenseAnnual 每年預定支出金額 (新台幣)
+ * @param rReal 實質複利報酬率 (小數，如 0.041 代表 4.1%)
+ * @param years 預期壽命/提領年數 (年，例如 30)
+ */
+export function calculateTargetAssetAnnuity(expenseAnnual: number, rReal: number, years: number): number {
+  if (expenseAnnual <= 0 || years <= 0) return 0;
+  
+  // 防禦性處理：若實質報酬率接近 0
+  if (Math.abs(rReal) < 0.0001) {
+    return expenseAnnual * years;
+  }
+  
+  return expenseAnnual * ((1 - Math.pow(1 + rReal, -years)) / rReal);
+}
+
+/**
  * 利用複利公式計算未來資產總值 (FV)
  * FV = PV * (1 + r)^n + PMT * [((1 + r)^n - 1) / r]
  * 

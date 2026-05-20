@@ -26,6 +26,9 @@ export interface AppState {
   actualHoldings: { [symbol: string]: number };
   // 每日最新市價與匯率的自動更新日期
   lastMarketUpdateDate?: string;
+  // B1 多元提領法則
+  withdrawalStrategy: 'trinity' | 'guyton_klinger' | 'die_to_zero';
+  retirementYears: number;
 }
 
 interface AppContextProps extends AppState {
@@ -48,6 +51,8 @@ interface AppContextProps extends AppState {
   resetEtfPrices: () => void;
   setActualHolding: (symbol: string, shares: number) => void;
   resetAll: () => void;
+  setWithdrawalStrategy: (strategy: 'trinity' | 'guyton_klinger' | 'die_to_zero') => void;
+  setRetirementYears: (years: number) => void;
   // 背景更新價格狀態與函式
   isMarketUpdating: boolean;
   fetchLatestMarketData: (force?: boolean) => Promise<boolean>;
@@ -132,7 +137,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           etfCurrencies: parsed.etfCurrencies ?? DEFAULT_ETF_CURRENCIES, // 自訂幣別初始化
           etfAssetClasses: parsed.etfAssetClasses ?? DEFAULT_ETF_ASSET_CLASSES, // 自訂資產類型初始化
           actualHoldings: parsed.actualHoldings ?? DEFAULT_ACTUAL_HOLDINGS,
-          lastMarketUpdateDate: parsed.lastMarketUpdateDate ?? undefined
+          lastMarketUpdateDate: parsed.lastMarketUpdateDate ?? undefined,
+          withdrawalStrategy: parsed.withdrawalStrategy ?? 'trinity',
+          retirementYears: parsed.retirementYears ?? 30
         };
       }
     } catch (e) {
@@ -155,7 +162,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       etfPrices: DEFAULT_ETF_PRICES,
       etfCurrencies: DEFAULT_ETF_CURRENCIES,
       etfAssetClasses: DEFAULT_ETF_ASSET_CLASSES,
-      actualHoldings: DEFAULT_ACTUAL_HOLDINGS
+      actualHoldings: DEFAULT_ACTUAL_HOLDINGS,
+      withdrawalStrategy: 'trinity',
+      retirementYears: 30
     };
   });
 
@@ -247,6 +256,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setIsStressConfirmed = (confirmed: boolean) => {
     setState(prev => ({ ...prev, isStressConfirmed: confirmed }));
+  };
+
+  const setWithdrawalStrategy = (strategy: 'trinity' | 'guyton_klinger' | 'die_to_zero') => {
+    setState(prev => ({ ...prev, withdrawalStrategy: strategy }));
+  };
+
+  const setRetirementYears = (years: number) => {
+    setState(prev => ({ ...prev, retirementYears: Math.max(1, years) }));
   };
 
   const applyLegoPortfolio = (type: 'simple' | 'refined' | 'diverse') => {
@@ -510,7 +527,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       etfCurrencies: DEFAULT_ETF_CURRENCIES,
       etfAssetClasses: DEFAULT_ETF_ASSET_CLASSES,
       actualHoldings: DEFAULT_ACTUAL_HOLDINGS,
-      lastMarketUpdateDate: undefined
+      lastMarketUpdateDate: undefined,
+      withdrawalStrategy: 'trinity',
+      retirementYears: 30
     });
   };
 
@@ -537,6 +556,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetEtfPrices,
         setActualHolding,
         resetAll,
+        setWithdrawalStrategy,
+        setRetirementYears,
         isMarketUpdating,
         fetchLatestMarketData
       }}
