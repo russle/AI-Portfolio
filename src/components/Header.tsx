@@ -32,13 +32,13 @@ export const Header: React.FC = () => {
         </div>
         <div>
           <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
-            綠角資產配置戰略總覽
+            AI資產配置戰略總覽
             <span className="text-[9px] font-bold uppercase px-2 py-0.5 bg-gradient-to-r from-emerald-500/20 to-sky-500/20 border border-emerald-500/20 rounded text-emerald-400 font-mono">
               Beta
             </span>
           </h1>
           <p className="text-[10px] text-slate-500 font-semibold tracking-wide mt-0.5 hidden md:block">
-            綠角低成本指數化投資策略 (VT / VTI / BNDW) 戰術實踐工具
+            AI低成本指數化投資策略 (VT / VTI / BNDW) 戰術實踐工具
           </p>
         </div>
       </div>

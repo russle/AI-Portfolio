@@ -88,7 +88,7 @@ function Dashboard() {
 
       {/* 頁尾 */}
       <footer className="max-w-7xl w-full mx-auto px-4 text-center mt-12 border-t border-slate-900/60 pt-6 text-[10px] text-slate-500 font-semibold tracking-wide space-y-1">
-        <p>綠角資產配置戰略總覽互動式 Web App • 本專案所提供之所有數據及公式均參考長期歷史大數據，不構成具體投資建議。</p>
+        <p>AI資產配置戰略總覽互動式 Web App • 本專案所提供之所有數據及公式均參考長期歷史大數據，不構成具體投資建議。</p>
         <p>© 2026. Built with React + Tailwind CSS. Designed for Long-Term Disciplined Passive Investors.</p>
       </footer>
     </div>
