@@ -53,30 +53,30 @@ export const MarketConsole: React.FC = () => {
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden transition-all duration-300">
+    <div className="bg-white/95 border border-slate-200/80 shadow-md shadow-slate-100/50 rounded-3xl p-6 relative overflow-hidden transition-all duration-300">
       {/* 炫光裝飾背景 */}
-      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-emerald-500/5 to-transparent rounded-full -mr-10 -mt-10 pointer-events-none"></div>
+      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/5 to-transparent rounded-full -mr-10 -mt-10 pointer-events-none"></div>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-lg font-bold flex items-center gap-2 text-slate-200">
-            <Sliders className="w-5 h-5 text-emerald-400" />
+          <h3 className="text-lg font-bold flex items-center gap-2 text-slate-700">
+            <Sliders className="w-5 h-5 text-blue-600" />
             模擬市場控制面板 (Market Simulator)
           </h3>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500">
             手動編輯市場報價或觸發「宏觀經濟事件」，體驗在不同市場情境下資產配置防禦力與再平衡的運作。
           </p>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setIsOpen(!isOpen)}
-            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 rounded-xl transition-all cursor-pointer whitespace-nowrap"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-md shadow-blue-500/10 rounded-xl transition-all cursor-pointer whitespace-nowrap"
           >
             {isOpen ? '收折控制台' : '展開細部調整'}
           </button>
           <button
             onClick={resetEtfPrices}
-            className="px-4 py-2 border border-slate-800 hover:bg-slate-800/80 text-xs font-semibold text-slate-400 hover:text-slate-200 rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-500 hover:text-slate-700 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             一鍵還原
@@ -85,27 +85,27 @@ export const MarketConsole: React.FC = () => {
       </div>
 
       {/* 快捷宏觀事件 */}
-      <div className="flex flex-wrap gap-2 mt-4 border-t border-slate-800/50 pt-4">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 self-center mr-1">
+      <div className="flex flex-wrap gap-2 mt-4 border-t border-slate-100 pt-4">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-450 self-center mr-1">
           快捷事件模擬:
         </span>
         <button
           onClick={() => triggerMarketEvent('crash')}
-          className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+          className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-sm"
         >
           <Flame className="w-3.5 h-3.5" />
           模擬金融海嘯 (股票 -50%)
         </button>
         <button
           onClick={() => triggerMarketEvent('bubble')}
-          className="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-sm"
         >
           <ArrowUpRight className="w-3.5 h-3.5" />
           模擬科技牛市 (股票 +30%)
         </button>
         <button
           onClick={() => triggerMarketEvent('strong_usd')}
-          className="px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+          className="px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-750 border border-sky-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-sm"
         >
           <ArrowUpRight className="w-3.5 h-3.5" />
           美金強勢暴漲 (匯率 34.5)
@@ -114,10 +114,10 @@ export const MarketConsole: React.FC = () => {
 
       {/* 細部價格/匯率編輯欄位 */}
       {isOpen && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-6 border-t border-slate-800/80 pt-5 animate-fade-in">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 mt-6 border-t border-slate-150 pt-5 animate-fade-in">
           {/* 匯率編輯 */}
-          <div className="space-y-1 bg-slate-850/40 p-2.5 rounded-xl border border-slate-850">
-            <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+          <div className="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wide">
               匯率 (USD/TWD)
             </label>
             <input
@@ -125,7 +125,7 @@ export const MarketConsole: React.FC = () => {
               step="0.1"
               value={exchangeRate || ''}
               onChange={(e) => setExchangeRate(Number(e.target.value))}
-              className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500/50 focus:outline-none rounded-lg px-2 py-1 text-xs font-mono text-slate-200"
+              className="w-full bg-white border border-slate-200 focus:border-blue-500 focus:outline-none rounded-lg px-2 py-1 text-xs font-mono text-slate-800 transition-all"
             />
           </div>
 
@@ -137,16 +137,16 @@ export const MarketConsole: React.FC = () => {
                 key={symbol}
                 className={`space-y-1 p-2.5 rounded-xl border transition-all ${
                   isActive
-                    ? 'bg-slate-800/40 border-emerald-500/20 shadow-sm'
-                    : 'bg-slate-850/20 border-slate-850 opacity-60 hover:opacity-100'
+                    ? 'bg-blue-50/20 border-blue-200 shadow-sm shadow-blue-500/5'
+                    : 'bg-slate-50 border-slate-200 opacity-60 hover:opacity-100'
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-bold text-emerald-400 font-mono">
+                  <label className="block text-[10px] font-bold text-blue-600 font-mono">
                     {symbol}
                   </label>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                   )}
                 </div>
                 <input
@@ -154,7 +154,7 @@ export const MarketConsole: React.FC = () => {
                   step="0.5"
                   value={etfPrices[symbol] || ''}
                   onChange={(e) => handlePriceChange(symbol, e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500/50 focus:outline-none rounded-lg px-2 py-1 text-xs font-mono text-slate-200"
+                  className="w-full bg-white border border-slate-200 focus:border-blue-500 focus:outline-none rounded-lg px-2 py-1 text-xs font-mono text-slate-800 transition-all"
                 />
               </div>
             );

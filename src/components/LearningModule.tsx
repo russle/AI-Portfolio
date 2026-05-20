@@ -90,8 +90,8 @@ export const LearningModule: React.FC = () => {
 
   // Recharts 圓餅圖數據
   const pieData = [
-    { name: '股票 (Equity)', value: stockPercent, color: '#10B981' }, // 翡翠綠
-    { name: '債券 (Bonds)', value: bondPercent, color: '#1E3A8A' }   // 深海藍
+    { name: '股票 (Equity)', value: stockPercent, color: '#2563EB' }, // 專業寶藍色
+    { name: '債券 (Bonds)', value: bondPercent, color: '#64748B' }   // 穩健灰藍色
   ].filter(d => d.value > 0);
 
   const formatPercent = (val: number) => {
@@ -103,14 +103,14 @@ export const LearningModule: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8 bg-slate-900 text-slate-100 rounded-3xl p-6 lg:p-8 border border-slate-800 shadow-2xl">
+    <div className="space-y-8 bg-white text-slate-800 rounded-3xl p-6 lg:p-8 border border-slate-200/80 shadow-md shadow-slate-100/50">
       {/* 標題與簡介 */}
-      <div className="border-b border-slate-800 pb-5">
-        <h2 className="text-2xl font-bold flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-sky-400">
-          <Landmark className="w-7 h-7 text-emerald-400" />
+      <div className="border-b border-slate-100 pb-5">
+        <h2 className="text-2xl font-bold flex items-center gap-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-sky-600">
+          <Landmark className="w-7 h-7 text-blue-600" />
           模組 A：互動式觀念學習區
         </h2>
-        <p className="text-slate-400 text-sm mt-1">
+        <p className="text-slate-500 text-sm mt-1">
           調整滑桿以模擬不同「股債比例」在歷史大數據下的真實表現，體會「長期持有」與「風險分散」的核心哲學。
         </p>
       </div>
@@ -119,14 +119,14 @@ export const LearningModule: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         {/* 左側：滑桿與指標 */}
         <div className="space-y-6">
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-800 p-5 space-y-4">
+          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-5 space-y-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-semibold tracking-wide text-slate-300">當前資產配置比例</span>
+              <span className="text-sm font-semibold tracking-wide text-slate-600">當前資產配置比例</span>
               <div className="flex gap-2">
-                <span className="px-3 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs rounded-full font-bold">
+                <span className="px-3 py-1 bg-blue-50 text-blue-600 border border-blue-200 text-xs rounded-full font-bold">
                   股票: {stockPercent}%
                 </span>
-                <span className="px-3 py-1 bg-sky-500/10 text-sky-400 border border-sky-500/20 text-xs rounded-full font-bold">
+                <span className="px-3 py-1 bg-slate-100 text-slate-600 border border-slate-200 text-xs rounded-full font-bold">
                   債券: {bondPercent}%
                 </span>
               </div>
@@ -141,9 +141,9 @@ export const LearningModule: React.FC = () => {
                 step="1"
                 value={stockPercent}
                 onChange={handleSliderChange}
-                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500 focus:outline-none transition-all"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 focus:outline-none transition-all"
               />
-              <div className="flex justify-between text-xs text-slate-500 mt-2 font-mono">
+              <div className="flex justify-between text-xs text-slate-400 mt-2 font-mono">
                 <span>0% 股票 (極保守)</span>
                 <span>50% 股 50% 債</span>
                 <span>100% 股票 (極進取)</span>
@@ -154,43 +154,43 @@ export const LearningModule: React.FC = () => {
           {/* 指標卡片 */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 年化報酬率 */}
-            <div className="bg-slate-800/40 rounded-2xl border border-slate-800 p-4 space-y-2 hover:border-emerald-500/30 transition-all group">
-              <div className="flex items-center justify-between text-slate-400">
+            <div className="bg-slate-50/50 rounded-2xl border border-slate-100 p-4 space-y-2 hover:border-blue-300 hover:bg-white hover:shadow-sm transition-all duration-300 group">
+              <div className="flex items-center justify-between text-slate-500">
                 <span className="text-xs font-medium">預估年化報酬率</span>
-                <TrendingUp className="w-4 h-4 text-emerald-400 group-hover:scale-110 transition-transform" />
+                <TrendingUp className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform" />
               </div>
-              <div className="text-2xl font-bold font-mono text-emerald-400">
+              <div className="text-2xl font-bold font-mono text-blue-600">
                 {formatPercent(interpolated.returnRate)}
               </div>
-              <p className="text-[10px] text-slate-500 leading-normal">
+              <p className="text-[10px] text-slate-400 leading-normal">
                 長期持有下的平均複利年報酬。股票比重越高，長期報酬看俏。
               </p>
             </div>
 
             {/* 標準差 */}
-            <div className="bg-slate-800/40 rounded-2xl border border-slate-800 p-4 space-y-2 hover:border-blue-500/30 transition-all group">
-              <div className="flex items-center justify-between text-slate-400">
+            <div className="bg-slate-50/50 rounded-2xl border border-slate-100 p-4 space-y-2 hover:border-blue-300 hover:bg-white hover:shadow-sm transition-all duration-300 group">
+              <div className="flex items-center justify-between text-slate-500">
                 <span className="text-xs font-medium">資產標準差 (波動度)</span>
-                <Shield className="w-4 h-4 text-sky-400 group-hover:scale-110 transition-transform" />
+                <Shield className="w-4 h-4 text-slate-700 group-hover:scale-110 transition-transform" />
               </div>
-              <div className="text-2xl font-bold font-mono text-sky-400">
+              <div className="text-2xl font-bold font-mono text-slate-700">
                 {formatPercent(interpolated.sigma)}
               </div>
-              <p className="text-[10px] text-slate-500 leading-normal">
+              <p className="text-[10px] text-slate-400 leading-normal">
                 衡量資產報酬的震盪幅度。數值越低，持有體驗越安穩。
               </p>
             </div>
 
             {/* 金融海嘯最大跌幅 */}
-            <div className="bg-slate-800/40 rounded-2xl border border-slate-800 p-4 space-y-2 hover:border-red-500/30 transition-all group">
-              <div className="flex items-center justify-between text-slate-400">
+            <div className="bg-slate-50/50 rounded-2xl border border-slate-100 p-4 space-y-2 hover:border-rose-300 hover:bg-white hover:shadow-sm transition-all duration-300 group">
+              <div className="flex items-center justify-between text-slate-500">
                 <span className="text-xs font-medium">2008模擬極端跌幅</span>
-                <AlertTriangle className="w-4 h-4 text-rose-400 group-hover:scale-110 transition-transform" />
+                <AlertTriangle className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
               </div>
-              <div className="text-2xl font-bold font-mono text-rose-400">
+              <div className="text-2xl font-bold font-mono text-rose-600">
                 {formatPercent(interpolated.maxDrawdown)}
               </div>
-              <p className="text-[10px] text-slate-500 leading-normal">
+              <p className="text-[10px] text-slate-400 leading-normal">
                 若遭遇 2008 金融海嘯般的黑天鵝，預估可能產生的最大帳面回撤。
               </p>
             </div>
@@ -198,13 +198,13 @@ export const LearningModule: React.FC = () => {
         </div>
 
         {/* 右側：圓餅圖 */}
-        <div className="bg-slate-800/30 border border-slate-800/80 rounded-2xl p-6 flex flex-col items-center justify-center min-h-[300px] relative">
-          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-400 absolute top-4 left-4">
+        <div className="bg-slate-50/30 border border-slate-100 rounded-2xl p-6 flex flex-col items-center justify-center min-h-[300px] relative">
+          <h3 className="text-xs font-semibold uppercase tracking-widest text-slate-500 absolute top-4 left-4">
             資產比例分佈
           </h3>
           <div className="w-full h-56 flex items-center justify-center">
             {stockPercent === 0 && bondPercent === 0 ? (
-              <p className="text-slate-500">暫無配置數據</p>
+              <p className="text-slate-400">暫無配置數據</p>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -223,8 +223,8 @@ export const LearningModule: React.FC = () => {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                    itemStyle={{ color: '#f1f5f9', fontFamily: 'monospace' }}
+                    contentStyle={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.05)' }}
+                    itemStyle={{ color: '#1e293b', fontFamily: 'monospace' }}
                     formatter={(value) => [`${value}%`, '比例']}
                   />
                 </PieChart>
@@ -234,26 +234,26 @@ export const LearningModule: React.FC = () => {
           {/* 圖例說明 */}
           <div className="flex gap-6 mt-2 text-xs font-semibold">
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-              <span className="text-slate-300">股票 ({stockPercent}%)</span>
+              <div className="w-3 h-3 rounded-full bg-blue-600"></div>
+              <span className="text-slate-600">股票 ({stockPercent}%)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-blue-900"></div>
-              <span className="text-slate-300">債券 ({bondPercent}%)</span>
+              <div className="w-3 h-3 rounded-full bg-slate-500"></div>
+              <span className="text-slate-600">債券 ({bondPercent}%)</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 全球股市與資產權重地圖 */}
-      <div className="bg-slate-800/20 border border-slate-800 rounded-2xl p-5 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-4">
-          <h3 className="text-md font-bold flex items-center gap-2 text-slate-200">
-            <Globe className="w-5 h-5 text-sky-400" />
+      <div className="bg-slate-50/50 border border-slate-100 rounded-2xl p-5 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-4">
+          <h3 className="text-md font-bold flex items-center gap-2 text-slate-700">
+            <Globe className="w-5 h-5 text-sky-500" />
             全球股市與資產權重地圖
           </h3>
           {/* 區域切換按鈕 */}
-          <div className="flex flex-wrap gap-1 bg-slate-850 p-1 rounded-xl border border-slate-800">
+          <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/60">
             {(['global', 'us', 'europe', 'asia', 'emerging'] as RegionType[]).map((region) => {
               const regionNames: Record<RegionType, string> = {
                 global: '全球市場',
@@ -269,8 +269,8 @@ export const LearningModule: React.FC = () => {
                   onClick={() => setSelectedRegion(region)}
                   className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     active
-                      ? 'bg-gradient-to-r from-emerald-500 to-sky-500 text-slate-950 font-bold shadow-md'
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      ? 'bg-gradient-to-r from-blue-600 to-sky-500 text-white font-bold shadow-md shadow-blue-500/10'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-white/80'
                   }`}
                 >
                   {regionNames[region]}
@@ -285,30 +285,30 @@ export const LearningModule: React.FC = () => {
           {REGION_ETFS[selectedRegion].map((etf) => (
             <div
               key={etf.symbol}
-              className="bg-slate-850/80 hover:bg-slate-800/50 border border-slate-800 hover:border-slate-700/80 rounded-xl p-4 transition-all space-y-3 flex flex-col justify-between"
+              className="bg-white hover:bg-slate-50/50 border border-slate-200 hover:border-slate-300 rounded-xl p-4 shadow-sm hover:shadow transition-all duration-300 space-y-3 flex flex-col justify-between"
             >
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="text-md font-bold text-emerald-400 px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded font-mono">
+                    <span className="text-md font-bold text-blue-600 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded font-mono">
                       {etf.symbol}
                     </span>
-                    <span className="text-xs text-slate-400 font-semibold px-2 py-0.5 bg-slate-800 rounded-full border border-slate-800">
+                    <span className="text-xs text-slate-500 font-semibold px-2 py-0.5 bg-slate-100 rounded-full border border-slate-200">
                       {etf.role}
                     </span>
                   </div>
-                  <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
                 </div>
-                <h4 className="text-xs font-bold text-slate-200 tracking-tight leading-normal">
+                <h4 className="text-xs font-bold text-slate-700 tracking-tight leading-normal">
                   {etf.name}
                 </h4>
-                <p className="text-xs text-slate-400 leading-relaxed pt-1">
+                <p className="text-xs text-slate-500 leading-relaxed pt-1">
                   {etf.desc}
                 </p>
               </div>
-              <div className="border-t border-slate-800/60 pt-2 flex items-center justify-between text-[11px] text-slate-400 bg-slate-900/30 -mx-4 -mb-4 px-4 py-2 rounded-b-xl">
+              <div className="border-t border-slate-100 pt-2 flex items-center justify-between text-[11px] text-slate-500 bg-slate-50/50 -mx-4 -mb-4 px-4 py-2 rounded-b-xl">
                 <span className="flex items-center gap-1">
-                  <Info className="w-3.5 h-3.5 text-emerald-400" />
+                  <Info className="w-3.5 h-3.5 text-blue-600" />
                   {etf.weightSuggestion}
                 </span>
               </div>
