@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { ShieldCheck, Database, RefreshCw } from 'lucide-react';
+import { TrendingUp, Database, RefreshCw } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const { resetAll } = useApp();
@@ -28,7 +28,7 @@ export const Header: React.FC = () => {
     <header className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/85 border-b border-slate-200/80 shadow-sm px-6 py-4 flex items-center justify-between transition-all">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-sky-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/10">
-          <ShieldCheck className="w-6 h-6 stroke-[2.5]" />
+          <TrendingUp className="w-6 h-6 stroke-[2.5]" />
         </div>
         <div>
           <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-800 flex items-center gap-2">
