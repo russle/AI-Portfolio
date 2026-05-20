@@ -212,6 +212,58 @@ export const HealthCheck: React.FC = () => {
             </div>
           </div>
 
+          {/* 再平衡後預估資產對比 */}
+          {totalValueUSD > 0 && (
+            <div className="bg-blue-50/25 border border-blue-100 rounded-2xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold text-blue-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <RefreshCw className="w-4 h-4 text-blue-600 animate-spin-slow" />
+                  <span>💡 執行再平衡後 預估模擬對比</span>
+                </h4>
+                <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-bold">
+                  模擬試算
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {items.map((item) => {
+                  const expectedShares = item.currentShares + item.actionShares;
+                  const expectedValue = expectedShares * item.price;
+                  const expectedPercent = totalValueUSD > 0 ? expectedValue / totalValueUSD : 0;
+                  return (
+                    <div key={item.symbol} className="bg-white border border-slate-200/80 rounded-xl p-3.5 space-y-3 shadow-sm shadow-slate-100/20">
+                      <div className="flex justify-between items-center border-b border-slate-50 pb-1.5">
+                        <span className="text-xs font-extrabold text-blue-600 font-mono">{item.symbol}</span>
+                        <span className="text-[10px] text-slate-400 font-bold font-mono">
+                          ${item.price.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center pt-0.5">
+                        <div>
+                          <span className="block text-[9px] text-slate-400 font-semibold uppercase">目前股數</span>
+                          <span className="text-xs font-bold font-mono text-slate-700">{item.currentShares} 股</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] text-blue-600 font-bold uppercase">平衡後預估</span>
+                          <span className="text-xs font-bold font-mono text-blue-600">{expectedShares} 股</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center border-t border-slate-100 pt-2">
+                        <div>
+                          <span className="block text-[9px] text-slate-400 font-semibold uppercase">目前權重</span>
+                          <span className="text-xs font-bold font-mono text-slate-650">{formatPercent(item.currentPercent)}</span>
+                        </div>
+                        <div>
+                          <span className="block text-[9px] text-blue-600 font-bold uppercase">平衡後預估</span>
+                          <span className="text-xs font-bold font-mono text-blue-600">{formatPercent(expectedPercent)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* 溫馨小貼士 */}
           <div className="flex gap-2 text-[10px] text-slate-500 leading-normal bg-slate-50 p-3 rounded-xl border border-slate-200">
             <Info className="w-4 h-4 text-blue-600 shrink-0" />
