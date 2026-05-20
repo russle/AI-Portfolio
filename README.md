@@ -1,4 +1,4 @@
-# 綠角資產配置戰略總覽 (AI-Portfolio)
+# AI資產配置戰略總覽 (AI-Portfolio)
 
 > **專為被動指數投資者 (Passive Index Investors) 打造的高級互動式 Web 戰略決策系統。本專案傳承指數化配置教父綠角（Greenhorn）的「長期持有」與「紀律再平衡」哲學，旨在解決投資人從觀念理解到落地執行之間的數據斷層。**
 
