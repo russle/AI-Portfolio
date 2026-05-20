@@ -21,6 +21,7 @@ export interface AppState {
   exchangeRate: number;
   etfPrices: { [symbol: string]: number };
   etfCurrencies: { [symbol: string]: 'USD' | 'TWD' }; // 新增計價幣別地圖
+  etfAssetClasses: { [symbol: string]: 'stock' | 'bond' }; // 新增資產類型地圖
   // D1 再平衡
   actualHoldings: { [symbol: string]: number };
   // 每日最新市價與匯率的自動更新日期
@@ -42,6 +43,7 @@ interface AppContextProps extends AppState {
   setExchangeRate: (rate: number) => void;
   setEtfPrice: (symbol: string, price: number) => void;
   setEtfCurrency: (symbol: string, currency: 'USD' | 'TWD') => void; // 新增設定標的幣別
+  setEtfAssetClass: (symbol: string, assetClass: 'stock' | 'bond') => void; // 新增設定資產類型
   removeCustomEtf: (symbol: string) => void; // 新增移除自訂標的
   resetEtfPrices: () => void;
   setActualHolding: (symbol: string, shares: number) => void;
@@ -72,6 +74,17 @@ const DEFAULT_ETF_CURRENCIES: { [symbol: string]: 'USD' | 'TWD' } = {
   BNDX: 'USD',
   VNQ: 'USD',
   DBC: 'USD'
+};
+
+const DEFAULT_ETF_ASSET_CLASSES: { [symbol: string]: 'stock' | 'bond' } = {
+  VT: 'stock',
+  BNDW: 'bond',
+  VTI: 'stock',
+  VXUS: 'stock',
+  BND: 'bond',
+  BNDX: 'bond',
+  VNQ: 'stock',
+  DBC: 'stock'
 };
 
 const DEFAULT_TARGET_WEIGHTS = {
@@ -117,6 +130,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           exchangeRate: parsed.exchangeRate ?? 32.2,
           etfPrices: parsed.etfPrices ?? DEFAULT_ETF_PRICES,
           etfCurrencies: parsed.etfCurrencies ?? DEFAULT_ETF_CURRENCIES, // 自訂幣別初始化
+          etfAssetClasses: parsed.etfAssetClasses ?? DEFAULT_ETF_ASSET_CLASSES, // 自訂資產類型初始化
           actualHoldings: parsed.actualHoldings ?? DEFAULT_ACTUAL_HOLDINGS,
           lastMarketUpdateDate: parsed.lastMarketUpdateDate ?? undefined
         };
@@ -140,6 +154,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       exchangeRate: 32.2,
       etfPrices: DEFAULT_ETF_PRICES,
       etfCurrencies: DEFAULT_ETF_CURRENCIES,
+      etfAssetClasses: DEFAULT_ETF_ASSET_CLASSES,
       actualHoldings: DEFAULT_ACTUAL_HOLDINGS
     };
   });
@@ -152,12 +167,58 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 3. 各項狀態 setter 封裝
   const setStockPercent = (percent: number) => {
-    setState(prev => ({
-      ...prev,
-      stockPercent: percent,
-      // 如果調整了股債比，如果當前是樂高配置，將其設為自訂配置 (因為目標比重與預設樂高不同了)
-      selectedLegoType: prev.selectedLegoType !== 'custom' ? 'custom' : 'custom'
-    }));
+    setState(prev => {
+      const newStockPercent = percent;
+      const newBondPercent = 100 - percent;
+      
+      // 計算目前配置的總目標權重
+      const totalWeight = Object.values(prev.targetWeights).reduce((sum, w) => sum + w, 0);
+      let newWeights = { ...prev.targetWeights };
+      
+      // 如果總目標權重剛好為 100% (容許極小誤差)
+      if (Math.abs(totalWeight - 1.0) < 0.001) {
+        let currentStockWeightSum = 0;
+        let currentBondWeightSum = 0;
+        
+        Object.entries(prev.targetWeights).forEach(([symbol, weight]) => {
+          const assetClass = prev.etfAssetClasses[symbol] || 'stock';
+          if (assetClass === 'stock') {
+            currentStockWeightSum += weight;
+          } else {
+            currentBondWeightSum += weight;
+          }
+        });
+        
+        const targetStockWeight = newStockPercent / 100;
+        const targetBondWeight = newBondPercent / 100;
+        
+        Object.keys(prev.targetWeights).forEach((symbol) => {
+          const weight = prev.targetWeights[symbol];
+          const assetClass = prev.etfAssetClasses[symbol] || 'stock';
+          
+          if (assetClass === 'stock') {
+            if (currentStockWeightSum > 0) {
+              newWeights[symbol] = parseFloat(((weight / currentStockWeightSum) * targetStockWeight).toFixed(4));
+            } else if (symbol === 'VT' || symbol === 'VTI') {
+              newWeights[symbol] = targetStockWeight;
+            }
+          } else {
+            if (currentBondWeightSum > 0) {
+              newWeights[symbol] = parseFloat(((weight / currentBondWeightSum) * targetBondWeight).toFixed(4));
+            } else if (symbol === 'BNDW' || symbol === 'BND') {
+              newWeights[symbol] = targetBondWeight;
+            }
+          }
+        });
+      }
+      
+      return {
+        ...prev,
+        stockPercent: percent,
+        targetWeights: newWeights,
+        selectedLegoType: 'custom' // 調整滑桿後均設為自訂配置
+      };
+    });
   };
 
   const setSelectedRegion = (region: RegionType) => {
@@ -190,29 +251,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const applyLegoPortfolio = (type: 'simple' | 'refined' | 'diverse') => {
     let weights: { [symbol: string]: number } = {};
+    let stockPercent = 70;
     
     if (type === 'simple') {
       weights = { VT: 0.70, BNDW: 0.30 };
+      stockPercent = 70;
     } else if (type === 'refined') {
       weights = { VTI: 0.40, VXUS: 0.30, BND: 0.20, BNDX: 0.10 };
+      stockPercent = 70;
     } else if (type === 'diverse') {
       weights = { VTI: 0.35, VXUS: 0.25, BND: 0.20, VNQ: 0.10, DBC: 0.10 };
+      stockPercent = 80; // VTI(35) + VXUS(25) + VNQ(10) + DBC(10) = 80
     }
 
     setState(prev => ({
       ...prev,
       selectedLegoType: type,
       targetWeights: weights,
-      stockPercent: 70, // 樂高模組預設都是 70% 股票比重
+      stockPercent: stockPercent,
     }));
   };
 
   const setTargetWeight = (symbol: string, weight: number) => {
     setState(prev => {
       const newWeights = { ...prev.targetWeights, [symbol]: Math.max(0, Math.min(1, weight)) };
+      
+      // 計算所有目標權重的總和
+      const totalWeight = Object.values(newWeights).reduce((sum, w) => sum + w, 0);
+      let updatedStockPercent = prev.stockPercent;
+      
+      // 只有在加總剛好等於 100% 時，才更新股債比連動
+      if (Math.abs(totalWeight - 1.0) < 0.001) {
+        let stockWeightSum = 0;
+        Object.entries(newWeights).forEach(([sym, w]) => {
+          const assetClass = prev.etfAssetClasses[sym] || 'stock';
+          if (assetClass === 'stock') {
+            stockWeightSum += w;
+          }
+        });
+        updatedStockPercent = Math.round(stockWeightSum * 100);
+      }
+      
       return {
         ...prev,
         targetWeights: newWeights,
+        stockPercent: updatedStockPercent,
         selectedLegoType: 'custom'
       };
     });
@@ -240,24 +323,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const setEtfAssetClass = (symbol: string, assetClass: 'stock' | 'bond') => {
+    setState(prev => {
+      const newClasses = { ...prev.etfAssetClasses, [symbol]: assetClass };
+      
+      // 屬性改變後，如果目前權重加總剛好等於 100%，也需要重新計算並連動 stockPercent
+      const totalWeight = Object.values(prev.targetWeights).reduce((sum, w) => sum + w, 0);
+      let updatedStockPercent = prev.stockPercent;
+      
+      if (Math.abs(totalWeight - 1.0) < 0.001) {
+        let stockWeightSum = 0;
+        Object.entries(prev.targetWeights).forEach(([sym, w]) => {
+          const currentClass = newClasses[sym] || 'stock';
+          if (currentClass === 'stock') {
+            stockWeightSum += w;
+          }
+        });
+        updatedStockPercent = Math.round(stockWeightSum * 100);
+      }
+      
+      return {
+        ...prev,
+        etfAssetClasses: newClasses,
+        stockPercent: updatedStockPercent
+      };
+    });
+  };
+
   const removeCustomEtf = (symbol: string) => {
     setState(prev => {
       const newPrices = { ...prev.etfPrices };
       const newCurrencies = { ...prev.etfCurrencies };
+      const newClasses = { ...prev.etfAssetClasses };
       const newHoldings = { ...prev.actualHoldings };
       const newTargetWeights = { ...prev.targetWeights };
       
       delete newPrices[symbol];
       delete newCurrencies[symbol];
+      delete newClasses[symbol];
       delete newHoldings[symbol];
       delete newTargetWeights[symbol];
+
+      // 重新計算剩下的目標權重總和與連動
+      const totalWeight = Object.values(newTargetWeights).reduce((sum, w) => sum + w, 0);
+      let updatedStockPercent = prev.stockPercent;
+      
+      if (Math.abs(totalWeight - 1.0) < 0.001) {
+        let stockWeightSum = 0;
+        Object.entries(newTargetWeights).forEach(([sym, w]) => {
+          const assetClass = newClasses[sym] || 'stock';
+          if (assetClass === 'stock') {
+            stockWeightSum += w;
+          }
+        });
+        updatedStockPercent = Math.round(stockWeightSum * 100);
+      }
 
       return {
         ...prev,
         etfPrices: newPrices,
         etfCurrencies: newCurrencies,
+        etfAssetClasses: newClasses,
         actualHoldings: newHoldings,
-        targetWeights: newTargetWeights
+        targetWeights: newTargetWeights,
+        stockPercent: updatedStockPercent
       };
     });
   };
@@ -379,6 +508,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       exchangeRate: 32.2,
       etfPrices: DEFAULT_ETF_PRICES,
       etfCurrencies: DEFAULT_ETF_CURRENCIES,
+      etfAssetClasses: DEFAULT_ETF_ASSET_CLASSES,
       actualHoldings: DEFAULT_ACTUAL_HOLDINGS,
       lastMarketUpdateDate: undefined
     });
@@ -402,6 +532,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setExchangeRate,
         setEtfPrice,
         setEtfCurrency,
+        setEtfAssetClass,
         removeCustomEtf,
         resetEtfPrices,
         setActualHolding,

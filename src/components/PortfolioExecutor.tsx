@@ -12,7 +12,10 @@ export const PortfolioExecutor: React.FC = () => {
     setInvestAmtTWD,
     exchangeRate,
     setExchangeRate,
-    etfPrices
+    etfPrices,
+    etfAssetClasses,
+    setEtfAssetClass,
+    setTargetWeight
   } = useApp();
 
   const orders = useMemo(() => {
@@ -107,7 +110,7 @@ export const PortfolioExecutor: React.FC = () => {
             <div className="space-y-2">
               <h4 className="text-md font-bold text-slate-700">2. 股債精研</h4>
               <p className="text-xs text-slate-500 leading-normal">
-                將股債市場進一步細分。區分美國本地與海外成熟市場股，並拆分美國債與國際債，追求更精細的分散。
+                將股債 market 進一步細分。區分美國本地與海外成熟市場股，並拆分美國債與國際債，追求更精細的分散。
               </p>
             </div>
             <div className="flex flex-wrap gap-1.5 pt-3 border-t border-slate-100 mt-2">
@@ -191,6 +194,33 @@ export const PortfolioExecutor: React.FC = () => {
           </div>
         </div>
 
+        {/* 權重總和與系統連動提示條 */}
+        {orders.length > 0 && (
+          <div className={`p-4 rounded-2xl border flex items-center justify-between text-xs font-semibold ${
+            Math.abs(totals.totalTargetPercent - 1.0) < 0.001
+              ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800'
+              : 'bg-amber-50/50 border-amber-200 text-amber-800'
+          }`}>
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                Math.abs(totals.totalTargetPercent - 1.0) < 0.001 ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500 animate-pulse'
+              }`}></div>
+              <span>
+                {Math.abs(totals.totalTargetPercent - 1.0) < 0.001
+                  ? `配置總目標比例已達 100%！已成功連動全站股債模擬（目前股票/風險資產比重為 ${Math.round(
+                      orders.reduce((sum, o) => sum + ((etfAssetClasses[o.symbol] || 'stock') === 'stock' ? o.targetPercent : 0), 0) * 100
+                    )}%）與退休目標規劃計算。`
+                  : `目標權重總和為 ${Math.round(totals.totalTargetPercent * 100)}%（未達 100%）。為維護資產配置嚴謹性，系統連動已暫停，請調整目標比例至 100%。`}
+              </span>
+            </div>
+            {Math.abs(totals.totalTargetPercent - 1.0) < 0.001 ? (
+              <span className="px-2 py-0.5 bg-emerald-100 border border-emerald-300 text-[10px] rounded-full uppercase tracking-wider font-bold">已同步</span>
+            ) : (
+              <span className="px-2 py-0.5 bg-amber-100 border border-amber-300 text-[10px] rounded-full uppercase tracking-wider font-bold">暫停同步</span>
+            )}
+          </div>
+        )}
+
         {/* 下單表格 */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
@@ -198,6 +228,7 @@ export const PortfolioExecutor: React.FC = () => {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider font-mono">
                   <th className="px-5 py-3">標的代號</th>
+                  <th className="px-5 py-3">資產類型 (點擊切換)</th>
                   <th className="px-5 py-3 text-right">目標權重</th>
                   <th className="px-5 py-3 text-right">即時股價 (USD)</th>
                   <th className="px-5 py-3 text-right">分配美金 (USD)</th>
@@ -208,7 +239,7 @@ export const PortfolioExecutor: React.FC = () => {
               <tbody className="divide-y divide-slate-100 text-xs font-semibold">
                 {orders.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-8 text-center text-slate-400 font-medium">
+                    <td colSpan={7} className="px-5 py-8 text-center text-slate-400 font-medium">
                       請輸入有效的投入台幣金額與匯率以計算下單股數。
                     </td>
                   </tr>
@@ -220,8 +251,38 @@ export const PortfolioExecutor: React.FC = () => {
                           {o.symbol}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-slate-600">
-                        {(o.targetPercent * 100).toFixed(0)}%
+                      <td className="px-5 py-3.5">
+                        <button
+                          onClick={() => {
+                            const currentClass = etfAssetClasses[o.symbol] || 'stock';
+                            setEtfAssetClass(o.symbol, currentClass === 'stock' ? 'bond' : 'stock');
+                          }}
+                          className={`px-2.5 py-1 border text-[10px] rounded-full font-bold cursor-pointer transition-all hover:scale-105 ${
+                            (etfAssetClasses[o.symbol] || 'stock') === 'stock'
+                              ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                              : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                          }`}
+                          title="點擊切換此標的的資產屬性（股票/債券）"
+                        >
+                          {(etfAssetClasses[o.symbol] || 'stock') === 'stock' ? '📈 股票型 (Stock)' : '🛡️ 債券型 (Bond)'}
+                        </button>
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="5"
+                            value={Math.round(o.targetPercent * 100)}
+                            onChange={(e) => {
+                              const newWeight = Math.max(0, Math.min(100, Number(e.target.value))) / 100;
+                              setTargetWeight(o.symbol, newWeight);
+                            }}
+                            className="w-16 bg-white border border-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 focus:outline-none rounded-lg px-2 py-1 text-right font-mono text-xs text-slate-800 transition-all"
+                          />
+                          <span className="text-slate-400 font-bold">%</span>
+                        </div>
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-slate-700">
                         ${o.price.toFixed(2)}
