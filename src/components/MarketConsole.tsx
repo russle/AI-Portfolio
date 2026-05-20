@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Flame, Sliders, RotateCcw, ArrowUpRight } from 'lucide-react';
+import { Flame, Sliders, RotateCcw, ArrowUpRight, RefreshCw, CheckCircle2 } from 'lucide-react';
 
 export const MarketConsole: React.FC = () => {
   const {
@@ -9,7 +9,10 @@ export const MarketConsole: React.FC = () => {
     etfPrices,
     setEtfPrice,
     resetEtfPrices,
-    targetWeights
+    targetWeights,
+    isMarketUpdating,
+    fetchLatestMarketData,
+    lastMarketUpdateDate
   } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -59,15 +62,36 @@ export const MarketConsole: React.FC = () => {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h3 className="text-lg font-bold flex items-center gap-2 text-slate-700">
+          <h3 className="text-lg font-bold flex flex-wrap items-center gap-2 text-slate-700">
             <Sliders className="w-5 h-5 text-blue-600" />
             模擬市場控制面板 (Market Simulator)
+            {isMarketUpdating ? (
+              <span className="inline-flex items-center gap-1 text-[9px] text-blue-600 font-bold px-2 py-0.5 bg-blue-50 border border-blue-100 rounded-full animate-pulse">
+                <RefreshCw className="w-2.5 h-2.5 animate-spin" />
+                正在背景同步今日市價...
+              </span>
+            ) : lastMarketUpdateDate ? (
+              <span className="inline-flex items-center gap-1 text-[9px] text-emerald-600 font-bold px-2 py-0.5 bg-emerald-50 border border-emerald-100 rounded-full">
+                <CheckCircle2 className="w-2.5 h-2.5" />
+                已自動同步今日最新收盤價 ({lastMarketUpdateDate})
+              </span>
+            ) : null}
           </h3>
           <p className="text-xs text-slate-500">
             手動編輯市場報價或觸發「宏觀經濟事件」，體驗在不同市場情境下資產配置防禦力與再平衡的運作。
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => fetchLatestMarketData(true)}
+            disabled={isMarketUpdating}
+            className={`px-4 py-2 border border-blue-200 bg-blue-50/50 hover:bg-blue-100 text-xs font-bold text-blue-600 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 shadow-sm ${
+              isMarketUpdating ? 'opacity-50 cursor-not-allowed' : ''
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isMarketUpdating ? 'animate-spin' : ''}`} />
+            {isMarketUpdating ? '同步中...' : '同步最新價格'}
+          </button>
           <button
             onClick={() => setIsOpen(!isOpen)}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-xs font-bold text-white shadow-md shadow-blue-500/10 rounded-xl transition-all cursor-pointer whitespace-nowrap"
