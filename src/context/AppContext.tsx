@@ -20,6 +20,7 @@ export interface AppState {
   investAmtTWD: number;
   exchangeRate: number;
   etfPrices: { [symbol: string]: number };
+  etfCurrencies: { [symbol: string]: 'USD' | 'TWD' }; // 新增計價幣別地圖
   // D1 再平衡
   actualHoldings: { [symbol: string]: number };
   // 每日最新市價與匯率的自動更新日期
@@ -40,6 +41,8 @@ interface AppContextProps extends AppState {
   setInvestAmtTWD: (amt: number) => void;
   setExchangeRate: (rate: number) => void;
   setEtfPrice: (symbol: string, price: number) => void;
+  setEtfCurrency: (symbol: string, currency: 'USD' | 'TWD') => void; // 新增設定標的幣別
+  removeCustomEtf: (symbol: string) => void; // 新增移除自訂標的
   resetEtfPrices: () => void;
   setActualHolding: (symbol: string, shares: number) => void;
   resetAll: () => void;
@@ -47,6 +50,7 @@ interface AppContextProps extends AppState {
   isMarketUpdating: boolean;
   fetchLatestMarketData: (force?: boolean) => Promise<boolean>;
 }
+
 
 const DEFAULT_ETF_PRICES = {
   VT: 120.5,
@@ -57,6 +61,17 @@ const DEFAULT_ETF_PRICES = {
   BNDX: 48.9,
   VNQ: 85.3,
   DBC: 22.1
+};
+
+const DEFAULT_ETF_CURRENCIES: { [symbol: string]: 'USD' | 'TWD' } = {
+  VT: 'USD',
+  BNDW: 'USD',
+  VTI: 'USD',
+  VXUS: 'USD',
+  BND: 'USD',
+  BNDX: 'USD',
+  VNQ: 'USD',
+  DBC: 'USD'
 };
 
 const DEFAULT_TARGET_WEIGHTS = {
@@ -101,6 +116,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           investAmtTWD: parsed.investAmtTWD ?? 300000,
           exchangeRate: parsed.exchangeRate ?? 32.2,
           etfPrices: parsed.etfPrices ?? DEFAULT_ETF_PRICES,
+          etfCurrencies: parsed.etfCurrencies ?? DEFAULT_ETF_CURRENCIES, // 自訂幣別初始化
           actualHoldings: parsed.actualHoldings ?? DEFAULT_ACTUAL_HOLDINGS,
           lastMarketUpdateDate: parsed.lastMarketUpdateDate ?? undefined
         };
@@ -123,9 +139,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       investAmtTWD: 300000,
       exchangeRate: 32.2,
       etfPrices: DEFAULT_ETF_PRICES,
+      etfCurrencies: DEFAULT_ETF_CURRENCIES,
       actualHoldings: DEFAULT_ACTUAL_HOLDINGS
     };
   });
+
 
   // 2. 將任何狀態改變存入 localStorage
   useEffect(() => {
@@ -215,10 +233,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const setEtfCurrency = (symbol: string, currency: 'USD' | 'TWD') => {
+    setState(prev => ({
+      ...prev,
+      etfCurrencies: { ...prev.etfCurrencies, [symbol]: currency }
+    }));
+  };
+
+  const removeCustomEtf = (symbol: string) => {
+    setState(prev => {
+      const newPrices = { ...prev.etfPrices };
+      const newCurrencies = { ...prev.etfCurrencies };
+      const newHoldings = { ...prev.actualHoldings };
+      const newTargetWeights = { ...prev.targetWeights };
+      
+      delete newPrices[symbol];
+      delete newCurrencies[symbol];
+      delete newHoldings[symbol];
+      delete newTargetWeights[symbol];
+
+      return {
+        ...prev,
+        etfPrices: newPrices,
+        etfCurrencies: newCurrencies,
+        actualHoldings: newHoldings,
+        targetWeights: newTargetWeights
+      };
+    });
+  };
+
   const resetEtfPrices = () => {
     setState(prev => ({
       ...prev,
-      etfPrices: DEFAULT_ETF_PRICES
+      etfPrices: DEFAULT_ETF_PRICES,
+      etfCurrencies: DEFAULT_ETF_CURRENCIES
     }));
   };
 
@@ -228,6 +276,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       actualHoldings: { ...prev.actualHoldings, [symbol]: Math.max(0, shares) }
     }));
   };
+
 
   const [isMarketUpdating, setIsMarketUpdating] = useState(false);
 
@@ -329,6 +378,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       investAmtTWD: 300000,
       exchangeRate: 32.2,
       etfPrices: DEFAULT_ETF_PRICES,
+      etfCurrencies: DEFAULT_ETF_CURRENCIES,
       actualHoldings: DEFAULT_ACTUAL_HOLDINGS,
       lastMarketUpdateDate: undefined
     });
@@ -351,6 +401,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setInvestAmtTWD,
         setExchangeRate,
         setEtfPrice,
+        setEtfCurrency,
+        removeCustomEtf,
         resetEtfPrices,
         setActualHolding,
         resetAll,
@@ -362,6 +414,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     </AppContext.Provider>
   );
 };
+
 
 export const useApp = () => {
   const context = useContext(AppContext);

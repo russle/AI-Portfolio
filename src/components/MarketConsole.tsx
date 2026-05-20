@@ -12,7 +12,8 @@ export const MarketConsole: React.FC = () => {
     targetWeights,
     isMarketUpdating,
     fetchLatestMarketData,
-    lastMarketUpdateDate
+    lastMarketUpdateDate,
+    etfCurrencies
   } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -156,6 +157,8 @@ export const MarketConsole: React.FC = () => {
           {/* 各個 ETF 價格編輯 */}
           {Object.keys(etfPrices).map((symbol) => {
             const isActive = activeSymbols.includes(symbol);
+            const currency = etfCurrencies[symbol] || 'USD';
+            
             return (
               <div
                 key={symbol}
@@ -166,11 +169,12 @@ export const MarketConsole: React.FC = () => {
                 }`}
               >
                 <div className="flex justify-between items-center">
-                  <label className="block text-[10px] font-bold text-blue-600 font-mono">
+                  <label className="block text-[10px] font-bold text-blue-600 font-mono flex items-center gap-1 truncate">
                     {symbol}
+                    <span className="text-[8px] text-slate-400 font-sans scale-90">({currency})</span>
                   </label>
                   {isActive && (
-                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                    <span className="w-1.5 h-1.5 bg-blue-500 rounded-full shrink-0"></span>
                   )}
                 </div>
                 <input

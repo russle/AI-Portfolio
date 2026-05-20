@@ -163,28 +163,43 @@ export interface RebalanceItem {
 export function calculateRebalancing(
   holdings: { [symbol: string]: number },
   targets: { [symbol: string]: number },
-  prices: { [symbol: string]: number }
+  prices: { [symbol: string]: number },
+  currencies: { [symbol: string]: 'USD' | 'TWD' } = {},
+  exchangeRate: number = 32.2
 ): {
   items: RebalanceItem[];
   totalValueUSD: number;
   hasWarning: boolean;
 } {
-  // 1. 計算各標的實際市值與總市值
+  // 1. 取得所有相關代號的聯集 (目標配置標的 + 實際持有大於 0 的標的)
+  const allSymbols = Array.from(new Set([
+    ...Object.keys(targets),
+    ...Object.keys(holdings).filter(symbol => holdings[symbol] > 0)
+  ]));
+
+  // 2. 計算各標的實際市值 (統一折算為美金) 與總市值
   let totalValueUSD = 0;
-  const rawItems = Object.keys(targets).map(symbol => {
+  const rawItems = allSymbols.map(symbol => {
     const shares = holdings[symbol] || 0;
-    const price = prices[symbol] || 0;
-    const value = shares * price;
-    totalValueUSD += value;
+    const price = prices[symbol] || 0; // 這是原始價格 (美股是美金，台股是台幣)
+    const currency = currencies[symbol] || 'USD';
     
-    return { symbol, shares, price, value };
+    // 如果是台幣計價，將其折合為美金單價
+    const priceUSD = currency === 'TWD'
+      ? (exchangeRate > 0 ? price / exchangeRate : 0)
+      : price;
+      
+    const valueUSD = shares * priceUSD;
+    totalValueUSD += valueUSD;
+    
+    return { symbol, shares, price, priceUSD, valueUSD, currency };
   });
 
-  // 2. 計算權重與偏差值
+  // 3. 計算權重、偏差值與再平衡交易股數
   let hasWarning = false;
-  const items: RebalanceItem[] = rawItems.map(({ symbol, shares, price, value }) => {
+  const items: RebalanceItem[] = rawItems.map(({ symbol, shares, price, priceUSD, valueUSD, currency }) => {
     const targetPercent = targets[symbol] || 0;
-    const currentPercent = totalValueUSD > 0 ? value / totalValueUSD : 0;
+    const currentPercent = totalValueUSD > 0 ? valueUSD / totalValueUSD : 0;
     const weightDiff = currentPercent - targetPercent;
     const deviationExceeded = Math.abs(weightDiff) >= 0.05;
     
@@ -192,20 +207,23 @@ export function calculateRebalancing(
       hasWarning = true;
     }
 
-    // 目標市值
+    // 目標美金市值
     const targetValueUSD = totalValueUSD * targetPercent;
-    // 應交易市值
-    const actionValueUSD = targetValueUSD - value;
-    // 應交易股數 (無條件取整，如果是買進可用 Math.floor，如果是賣出可取 Math.ceil，
-    // 為簡單起見直接以金額除以股價並四捨五入或無條件捨去，這裡用 Math.round 來盡量精準對齊目標比例)
-    const actionShares = price > 0 ? Math.round(actionValueUSD / price) : 0;
+    // 應交易美金市值
+    const actionValueUSD = targetValueUSD - valueUSD;
+    
+    // 應交易股數 (台股用台幣單價與台幣交易額算，美股用美金單價與美金交易額算)
+    const activePrice = currency === 'TWD' ? price : priceUSD;
+    const actionShares = activePrice > 0
+      ? Math.round((currency === 'TWD' ? actionValueUSD * exchangeRate : actionValueUSD) / activePrice)
+      : 0;
 
     return {
       symbol,
       targetPercent,
       currentShares: shares,
-      price,
-      currentValue: value,
+      price, // 保留原始單價
+      currentValue: valueUSD, // 為配合 RebalanceItem 定義與 UI，這裡存放美金市值
       currentPercent,
       weightDiff,
       deviationExceeded,
@@ -220,3 +238,4 @@ export function calculateRebalancing(
     hasWarning
   };
 }
+
