@@ -67,6 +67,7 @@ export interface AppContextProps {
     date: string,
     detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
   ) => void;
+  deleteHistoryPoint: (date: string) => void;
   // [NEW] 持股管理 API
   toggleHoldingMode: (enabled: boolean) => void;
   addHolding: (holding: Omit<HoldingItem, 'id'>) => void;
@@ -608,6 +609,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  const deleteHistoryPoint = (date: string) => {
+    setState(prev => {
+      const updatedHistory = prev.portfolio.history.filter(p => p.date !== date);
+      return {
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          history: updatedHistory
+        }
+      };
+    });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -619,6 +633,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         resetAll,
         importState,
         addGranularHistoryPoint,
+        deleteHistoryPoint,
         toggleHoldingMode,
         addHolding,
         deleteHolding,

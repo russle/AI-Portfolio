@@ -21,7 +21,9 @@ import {
   Database,
   CheckCircle,
   AlertCircle,
-  CalendarPlus
+  CalendarPlus,
+  Edit,
+  Trash2
 } from 'lucide-react';
 
 // 還原資料的欄位合法性校驗
@@ -64,7 +66,7 @@ const validateImportedState = (data: any): boolean => {
 };
 
 export const OverviewPage: React.FC = () => {
-  const { state, importState, addGranularHistoryPoint } = useApp();
+  const { state, importState, addGranularHistoryPoint, deleteHistoryPoint } = useApp();
   const navigate = useNavigate();
   const { portfolio, allocation_target, retirement } = state;
 
@@ -72,8 +74,9 @@ export const OverviewPage: React.FC = () => {
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 補記快照相關 State
+  // 補記與編輯快照相關 State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'add' | 'edit'>('add');
   const [modalDate, setModalDate] = useState('');
   const [modalCash, setModalCash] = useState(0);
   const [modalFund, setModalFund] = useState(0);
@@ -82,8 +85,9 @@ export const OverviewPage: React.FC = () => {
   const [modalCrypto, setModalCrypto] = useState(0);
   const [modalMsg, setModalMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
-  // 開啟 Modal 並智慧預填
+  // 開啟 Modal（新增模式）並智慧預填
   const openSnapshotModal = () => {
+    setModalMode('add');
     const history = portfolio.history;
     const latestPoint = history.length > 0 ? history[history.length - 1] : null;
 
@@ -97,7 +101,20 @@ export const OverviewPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  // 提交補記快照
+  // 開啟 Modal（編輯模式）並載入快照數據
+  const openEditSnapshotModal = (point: any) => {
+    setModalMode('edit');
+    setModalDate(point.date);
+    setModalCash(point.cash ?? 0);
+    setModalFund(point.fund ?? 0);
+    setModalTwStock(point.tw_stock ?? 0);
+    setModalUsStock(point.us_stock ?? 0);
+    setModalCrypto(point.crypto ?? 0);
+    setModalMsg(null);
+    setIsModalOpen(true);
+  };
+
+  // 提交快照 (新增或編輯)
   const handleModalSubmit = () => {
     if (!modalDate) {
       setModalMsg({ type: 'error', text: '❌ 請選擇正確的日期' });
@@ -109,11 +126,13 @@ export const OverviewPage: React.FC = () => {
       return;
     }
 
-    // 檢查日期重疊
-    const isDuplicate = portfolio.history.some(p => p.date === modalDate);
-    if (isDuplicate) {
-      const confirmOverwrite = window.confirm(`⚠️ 日期 [${modalDate}] 已存在歷史快照記錄。是否確定要覆寫該日期的細分資產數據？`);
-      if (!confirmOverwrite) return;
+    // 只有在新增模式下，如果重複日期才需要彈出 Overwrite 確認
+    if (modalMode === 'add') {
+      const isDuplicate = portfolio.history.some(p => p.date === modalDate);
+      if (isDuplicate) {
+        const confirmOverwrite = window.confirm(`⚠️ 日期 [${modalDate}] 已存在歷史快照記錄。是否確定要覆寫該日期的細分資產數據？`);
+        if (!confirmOverwrite) return;
+      }
     }
 
     // 呼叫 Context 方法
@@ -126,7 +145,12 @@ export const OverviewPage: React.FC = () => {
     });
 
     // 成功通知
-    setBackupMsg({ type: 'success', text: `🎉 歷史快照 [${modalDate}] 登錄成功！` });
+    setBackupMsg({ 
+      type: 'success', 
+      text: modalMode === 'add' 
+        ? `🎉 歷史快照 [${modalDate}] 登錄成功！` 
+        : `🎉 歷史快照 [${modalDate}] 編輯成功！` 
+    });
     setIsModalOpen(false);
     setTimeout(() => setBackupMsg(null), 4000);
   };
@@ -135,6 +159,25 @@ export const OverviewPage: React.FC = () => {
   const totalNetWorth = useMemo(() => {
     return calculateTotalPortfolioValue(portfolio);
   }, [portfolio]);
+
+  // 1.5 帶有 MoM 環比的歷史快照數組 (最新在最前)
+  const sortedHistoryWithMoM = useMemo(() => {
+    const sorted = [...portfolio.history].sort((a, b) => b.date.localeCompare(a.date));
+    return sorted.map((point, index) => {
+      const prevPoint = sorted[index + 1];
+      let momAmount = 0;
+      let momPercent = 0;
+      if (prevPoint) {
+        momAmount = point.net_worth - prevPoint.net_worth;
+        momPercent = prevPoint.net_worth > 0 ? (momAmount / prevPoint.net_worth) * 100 : 0;
+      }
+      return {
+        ...point,
+        momAmount,
+        momPercent
+      };
+    });
+  }, [portfolio.history]);
 
   // 2. 月增減計算 (與 history 倒數第二筆比對)
   const monthlyChange = useMemo(() => {
@@ -481,6 +524,138 @@ export const OverviewPage: React.FC = () => {
 
       </div>
 
+      {/* 📝 歷史月誌與快照管理面板 (Monthly Asset Logger) */}
+      <Card hoverEffect={false} className="bg-white/70 backdrop-blur-md border border-slate-200/80 shadow-md">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 select-none">
+          <div>
+            <h2 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              📝 歷史月誌與快照管理面板
+            </h2>
+            <p className="text-xs font-semibold text-slate-400 mt-0.5">
+              按月管理您的資產歷史快照，即時追蹤 MoM 環比成長與配置消長
+            </p>
+          </div>
+          <button
+            onClick={openSnapshotModal}
+            className="flex items-center justify-center gap-1.5 py-1.5 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02] self-start sm:self-auto"
+          >
+            <CalendarPlus className="w-4 h-4" />
+            補記歷史快照
+          </button>
+        </div>
+
+        {sortedHistoryWithMoM.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <span className="text-4xl mb-3">📭</span>
+            <h3 className="text-sm font-bold text-slate-700">目前尚無歷史月誌快照</h3>
+            <p className="text-xs font-semibold text-slate-400 mt-1 max-w-sm">
+              快照歷史可以幫助您生成長期的資產增長圖表與年化報酬精算。請點擊上方按鈕補記您的第一筆快照！
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto -mx-6 px-6">
+            <table className="w-full text-left border-collapse min-w-[800px]">
+              <thead>
+                <tr className="border-b border-slate-200/60 text-[10px] font-black text-slate-400 uppercase tracking-wider select-none">
+                  <th className="pb-3 font-black">月份 / 日期</th>
+                  <th className="pb-3 font-black">總淨資產 (TWD)</th>
+                  <th className="pb-3 font-black">MoM 環比變化</th>
+                  <th className="pb-3 font-black">細分資產配置 (大於 $0 標的)</th>
+                  <th className="pb-3 text-right font-black">操作項目</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                {sortedHistoryWithMoM.map((point) => (
+                  <tr key={point.date} className="hover:bg-slate-50/40 transition-colors group">
+                    <td className="py-4 font-bold text-slate-800">{point.date}</td>
+                    <td className="py-4 font-extrabold text-slate-900">
+                      ${point.net_worth.toLocaleString()}
+                    </td>
+                    <td className="py-4">
+                      {point.momAmount !== 0 || sortedHistoryWithMoM.indexOf(point) < sortedHistoryWithMoM.length - 1 ? (
+                        <div className={`flex items-center gap-0.5 font-bold ${point.momAmount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {point.momAmount >= 0 ? (
+                            <ArrowUpRight className="w-3.5 h-3.5 flex-shrink-0" />
+                          ) : (
+                            <ArrowDownRight className="w-3.5 h-3.5 flex-shrink-0" />
+                          )}
+                          <span>
+                            {point.momAmount >= 0 ? '+' : ''}
+                            {point.momAmount.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] opacity-90 ml-1">
+                            ({point.momAmount >= 0 ? '+' : ''}
+                            {point.momPercent.toFixed(1)}%)
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400 text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded-md">
+                          首期記點
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {point.cash !== undefined && point.cash > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-200/50">
+                            💵 現金: ${point.cash.toLocaleString()}
+                          </span>
+                        )}
+                        {point.fund !== undefined && point.fund > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-200/50">
+                            📈 基金/債券: ${point.fund.toLocaleString()}
+                          </span>
+                        )}
+                        {point.tw_stock !== undefined && point.tw_stock > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-emerald-50 text-emerald-600 border border-emerald-200/50">
+                            🇹🇼 台股: ${point.tw_stock.toLocaleString()}
+                          </span>
+                        )}
+                        {point.us_stock !== undefined && point.us_stock > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-600 border border-amber-200/50">
+                            🇺🇸 美股: ${point.us_stock.toLocaleString()}
+                          </span>
+                        )}
+                        {point.crypto !== undefined && point.crypto > 0 && (
+                          <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-purple-50 text-purple-600 border border-purple-200/50">
+                            🪙 加密: ${point.crypto.toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-4 text-right">
+                      <div className="flex items-center justify-end gap-2 opacity-85 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => openEditSnapshotModal(point)}
+                          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-blue-600 rounded-lg cursor-pointer transition-colors"
+                          title="編輯此期快照"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            const confirmDelete = window.confirm(`⚠️ 您確定要刪除 [${point.date}] 的歷史快照嗎？此操作將會重新精算您的資產曲線與環比數據，且無法復原。`);
+                            if (confirmDelete) {
+                              deleteHistoryPoint(point.date);
+                              setBackupMsg({ type: 'success', text: `🗑️ 已成功刪除 [${point.date}] 的歷史快照` });
+                              setTimeout(() => setBackupMsg(null), 4000);
+                            }
+                          }}
+                          className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
+                          title="刪除此期快照"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* 四大入口卡片區 */}
       <div>
         <div className="flex flex-col mb-4 select-none">
@@ -581,7 +756,9 @@ export const OverviewPage: React.FC = () => {
                 <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
                   <CalendarPlus className="w-4 h-4" />
                 </span>
-                <h3 className="text-sm font-black text-slate-800">📝 補記歷史快照</h3>
+                <h3 className="text-sm font-black text-slate-800">
+                  {modalMode === 'add' ? '📝 補記歷史快照' : '✏️ 編輯歷史快照'}
+                </h3>
               </div>
               <button 
                 onClick={() => setIsModalOpen(false)}
@@ -601,12 +778,19 @@ export const OverviewPage: React.FC = () => {
             <div className="space-y-4">
               {/* 日期欄位 */}
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">選擇快照日期</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">
+                  {modalMode === 'add' ? '選擇快照日期' : '快照日期 (編輯模式下不可修改)'}
+                </label>
                 <input
                   type="date"
                   value={modalDate}
+                  disabled={modalMode === 'edit'}
                   onChange={(e) => setModalDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  className={`w-full px-3 py-2 border rounded-xl text-xs font-bold transition-colors focus:outline-none focus:border-blue-500 ${
+                    modalMode === 'edit'
+                      ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed opacity-70'
+                      : 'bg-slate-50 border-slate-200 text-slate-700'
+                  }`}
                 />
               </div>
 
