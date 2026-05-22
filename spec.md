@@ -1,209 +1,195 @@
-這是一份為 AI 工程師量身打造的 **`spec.md` 系統規格文件**。這份規格書結構嚴謹，包含清晰的模組劃分、輸入/輸出 定義、核心演算法公式（使用 LaTeX），以及 UI/UX 實作指南，讓你的 AI 開發助手可以一讀就懂、直接開工。
+# 🚀 AI資產配置戰略總覽 (AI-Portfolio) —— 系統規格說明書 (spec.md)
+
+本專案已全面升級重構為基於 **React Router** 的響應式多頁面單頁 Web 應用程式（SPA）。本規格說明書旨在詳細記錄系統的核心技術棧、路由頁面架構、全域狀態持久化設計、三大財務計算引擎核心公式，以及頂級 HSL/毛玻璃視覺美學之實作指南，供後續開發與 AI 助手參考。
 
 ---
 
-# AI資產配置戰略總覽——互動式 Web App 系統規格書 (spec.md)
+## 1. 技術棧與系統架構 (Tech Stack & Architecture)
 
-## 1. 專案概述 (Project Overview)
-
-本專案旨在將「AI資產配置戰略總覽」之核心教學邏輯與實戰工具，系統化為一個單頁面/響應式（RWD）的互動式 Web 應用程式。協助使用者透過數據視覺化建立正確理財觀念、量身計算財務目標、一鍵生成下單股數，並於長期持有時進行再平衡計算。
-
----
-
-## 2. 技術棧建議 (Architecture & Tech Stack)
-
-* **前端框架**：React.js (TypeScript) 或 Vue 3 (Composition API)
-* **狀態管理**：Pinia / Zustand 或 React Context API（用於跨組件傳遞使用者資產與配置資料）
-* **圖表套件**：Chart.js 或 Recharts (支援流暢動畫與 RWD 縮放)
-* **API 整合**：Yahoo Finance API 或類似的免費金融數據 API（用於抓取即時 ETF 價格）
-* **部署環境**：支援 Docker 容器化，可輕鬆部署於 Cloudflare Pages 或傳統雲端架構。
+* **核心框架**：React 19 + TypeScript (啟用嚴格型別檢查與 `verbatimModuleSyntax` 嚴格模組語法)。
+* **多路由分發**：`react-router-dom` v7.x —— 使用 `HashRouter` 作為路由管理器，防止純 CSR 部署在 Cloudflare Pages 等靜態託管環境下重新整理出現 404 錯誤。
+* **狀態管理與持久化**：使用客製化 React Context API + LocalStorage。全站資料以 `aiPortfolio` 作為單一儲存鍵進行讀取與寫入，並於各頁面間進行同步廣播。
+* **圖表視覺化**：Recharts v3.x —— 支援流暢的 HSL 漸變渲染、多同心圓環圖及對比柱狀圖。
+* **樣式與美學**：Tailwind CSS v4 + Vanilla CSS —— 導入毛玻璃（Glassmorphism）、平滑漸變光影及微動畫，營造 premium 財經工具體驗。
 
 ---
 
-## 3. 功能模組詳細規格 (Functional Specifications)
+## 2. 路由與頁面架構 (Routing & Page Specs)
 
-### 模組 A：互動式觀念學習區 (Interactive Learning Module)
+系統配置了簡潔直觀的毛玻璃 Navbar，支援響應式（RWD）折疊導航，對應六大核心業務分頁：
 
-#### 功能 A1：股債搭配歷史模擬器
+### 🏠 A. 總覽首頁 (Overview) —— `/` 或 `/#/`
+* **頁面功能**：呈現當前全站財務摘要（總資產、預估年化報酬率、退休成功率及通膨率），並繪製 Recharts 漸變歷史淨值折線圖。
+* **快捷入口**：提供六大模組卡片，方便一鍵跳轉。
 
-* **UI 元素**：
-* 配置滑桿 (Slider)：允許使用者調整「股票 %」，「債券 %」自動連動扣除（兩者加總必定為 100%）。
-* 圓餅圖 (Pie Chart)：顯示當前股債比。
-* 指標卡片 (Metric Cards)：顯示年化報酬率、標準差、最大回撤。
+### 📊 B. 配置目標 (Allocation) —— `/#/allocation`
+* **頁面功能**：行內輸入與編輯 ETF 的目標配置權重、即時防禦累計加總。
+* **視覺對比**：渲染 Recharts 雙層同心圓環圖（外圈顯示大類，內圈顯示具體標的比重），直觀比對「當前實際配置」與「目標配比」。
 
+### 🔄 C. 資產再平衡 (Rebalance) —— `/#/rebalance`
+* **頁面功能**：提供強大的資產再平衡決策支援。
+* **三大模式**：支援「精準買賣再平衡」、「只買不賣新資金再平衡」與「偏離門檻再平衡」，並支持 slider 動態調節偏差門檻（預設 5%）。
 
-* **邏輯與數據對應**（後台靜態模擬數據，以全球股市與全球債券歷史大數據為估算基準）：
-| 股票比重 | 預估年化報酬率 ($r_{g}$) | 資產標準差 ($\sigma$) | 2008年金融海嘯模擬跌幅 ($D_{max}$) |
-| --- | --- | --- | --- |
-| 100% | 8.5% | 16.2% | -50% |
-| 80% | 7.3% | 13.1% | -38% |
-| 60% | 6.1% | 10.2% | -26% |
-| 40% | 4.9% | 7.5% | -14% |
-| 20% | 3.7% | 5.1% | -4% |
+### 🧓 D. 退休財務規劃 (Retirement) —— `/#/retirement`
+* **頁面功能**：實作被動提領逆推與 Monte Carlo 隨機模擬。
+* **法則選擇**：支援 4% 法則 (Trinity)、Guyton-Klinger 動態護欄法則、以及 Die to Zero 財產歸零法則。
+* **儀表板**：以 SVG 半圓形儀表板展現退休可行性評估，並支援退休前累積期與退休後消耗期之圖表翻轉。
 
+### 📝 E. 輔助下單機 (Order) —— `/#/order`
+* **頁面功能**：將新增的預備投資金，按目標權重一鍵換算為美股/台股「應買進股數」、「分配美金」與「預估剩餘現金」，進行零頭無損防禦展示。
 
-
-#### 功能 A2：全球股市與資產權重地圖
-
-* **UI 元素**：區域切換按鈕組（全球、美國、歐洲、亞太、新興市場）。
-* **行為**：點擊切換時，下方動態更新代表性 ETF 推薦清單（VT, VTI, VGK, VPL, VWO, BND, VNQ）及其核心投資角色說明。
-
----
-
-### 模組 B：個人化財務規劃與壓力測試 (Financial Planning & Stress Test)
-
-#### 功能 B1：退休財務多元提領逆推計算機
-
-* **輸入欄位 (Inputs)**：
-  * 目前年齡 ($Age_{current}$)、預計退休年齡 ($Age_{retire}$)。
-  * 退休後每月生活費 ($Exp_{month}$)。
-  * 現有資產單筆投入 ($PV$)、每年預計持續投入金額 ($PMT$)。
-  * **提領法則選擇 (withdrawalStrategy)**：`trinity` (4% 法則) | `guyton_klinger` (GK 法則) | `die_to_zero` (財產歸零)。
-  * **退休後預期存活年數 (retirementYears)**：於選中 `die_to_zero` 時滑出展示 (10 ~ 50年)。
-
-* **核心邏輯與公式**：
-  1. **實質年化報酬率 ($r_{real}$)**：基於名目預期年化報酬率扣除 $2.0\%$ 的長期通膨率，得出實質利率：
-     $$r_{real} = \max(0.01, r - 0.02)$$
-     設有 $1.0\%$ 的安全下限，確保重債券配置下的計算不會產生非理性的極端資產目標。
-  2. **目標資產總額 ($Target$) 逆推**：
-     * **4% 提領法則 (Trinity Study)**：
-       $$Target = (Exp_{month} \times 12) \div 0.04$$
-     * **蓋頓-克林格動態提領 (Guyton-Klinger)**：初始提領率設為 $5.0\%$：
-       $$Target = (Exp_{month} \times 12) \div 0.05$$
-       * **富裕增領與防禦減領護欄**：
-         $$\text{富裕增領臨界值} = Target \times 1.2$$
-         $$\text{防禦減領臨界值} = Target \times 0.8$$
-         當退休後資產超出臨界值時，提領金額分別進行 $+10\%$ 與 $-10\%$ 的動態調整。
-     * **財產歸零提領 (Die to Zero)**：採用年金現值逆推公式（退休存活年期為 $N_{surv}$）：
-       $$Target = (Exp_{month} \times 12) \times \frac{1 - (1 + r_{real})^{-N_{surv}}}{r_{real}}$$
-  3. **投資年期 ($n$)**：
-     $$n = Age_{retire} - Age_{current}$$
-  4. **退休前複利累積資產 ($FV$)**：
-     $$FV = PV \times (1 + r)^n + PMT \times \frac{(1 + r)^n - 1}{r}$$
-
-* **輸出結果 (Outputs)**：
-  * 目標總資產金額。
-  * **Recharts 折線圖動態翻轉**：
-    - 當選用 `trinity` / `guyton_klinger` 法則時，繪製**「退休前複利累積期」**折線圖（累積投入本金 vs 含複利之總資產成長）。
-    - 當選用 `die_to_zero` 法則時，繪製**「退休後消耗期」**折線圖（從退休年齡開始，安全目標資產軌跡隨提領以年金化拋物線消耗至存活終點歸零，並繪製實際累積資產消耗軌跡以供對比）。
-  * **提前枯竭智慧警報**：若實際退休資產 $FV < Target$，在 `Die to Zero` 圖表下方以紅色高亮警告，指出在幾歲時資產將提前枯竭。
-
-#### 功能 B2：心理壓力測試警示系統
-
-* **觸發時機**：當選擇的股市比重達 70% 以上時，系統主動彈出警告卡片。
-* **核心公式**：
-  $$\text{帳面預估最大虧損額} = FV \times D_{max}$$
-
-* **UI 呈現**：
-  > ⚠️ **極端市場壓力測試**
-  > 當遭遇類似 2008 年的金融海嘯（股市大跌 50%）時，您的資產在退休前夕可能會面臨高達 **$[計算結果] 萬元**的帳面虧損。這是否在您的心理承受範圍內？
-
-* 提供按鈕：【是的，我能堅守紀律】/【不，幫我調高債券比重以降低風險】。
-
-
-
+### 💥 F. 壓力測試與情境預演 (Scenario) —— `/#/scenario`
+* **頁面功能**：情境分析與壓力測試沙盒。在不污染真實 context 狀態的情況下，一鍵預演「市場暴跌 -10%」、「美股大牛市 +20%」、「美元飆升至 35 TWD」及「惡性通膨至 5%」對退休成功率的衝擊，並支持「確認套用」將預演配置寫回全域真實狀態。
 
 ---
 
-### 模組 C：樂高式配置與下單計算機 (Portfolio Executor)
+## 3. 全域狀態管理與持久化數據模型 (State Model)
 
-#### 功能 C1：樂高模組一鍵套用
+全域狀態定義於 `AppContext.tsx`，資料結構定義如下：
 
-* **功能**：提供三個卡片按鈕快速帶入設定比重，並自動同步全站股債比例：
-  1. **最簡配置**：VT (70%) + BNDW (30%) ➡️ 同步更新全站股債比為 `70% / 30%`。
-  2. **股債精研**：VTI (40%) + VXUS (30%) + BND (20%) + BNDX (10%) ➡️ 同步更新全站股債比為 `70% / 30%`。
-  3. **多元資產**：VTI (35%) + VXUS (25%) + BND (20%) + VNQ (10%) + DBC (10%) ➡️ 同步更新全站股債比為 `80% / 20%`（包含房地產與商品等風險資產）。
+```typescript
+export type PortfolioHistoryPoint = {
+  date: string;      // YYYY-MM-DD
+  net_worth: number; // 當日資產淨值總和
+};
 
+export type Portfolio = {
+  cash: number;      // 現金
+  fund: number;      // 基金與債券
+  tw_stock: number;  // 台灣股票
+  us_stock: number;  // 美國股票
+  crypto: number;    // 加密貨幣
+  history: PortfolioHistoryPoint[];
+};
 
-#### 功能 C2：即時下單股數計算機（支援自訂與雙向自動連動）
+export type AllocationTarget = {
+  tw_stock: number;  // 0 ~ 1 比例
+  us_stock: number;
+  bond: number;
+  cash: number;
+  crypto: number;
+};
 
-* **UI 佈局與元素**：
-  * **2/3 與 1/3 雙欄響應式佈局**：左側 2/3 顯示下單配置表格，右側 1/3 顯示 Recharts 圖表與計算卡片。
-  * **Recharts 雙層同心圓環圖**：
-    * **外圈**：顯示 $>0\%$ 權重的具體個股/ETF 比例。依資產屬性分配進階漸層色盤（股票為漸變藍色，債券為漸變灰色）。
-    * **內圈**：顯示股票與風險資產 vs 債券與避險資產之大類比例。
-    * **圓心**：動態展示當前實質「股債比」（如 `70/30`）。
-  * **行內一體化新增標的列**：於表格 `tbody` 最底端嵌入一行輸入新增列，使用者可直接輸入 `代號`、`計價幣別`、`單價` 並選取 `資產類型`，點擊新增即以 0% 目標權重寫入表格，並配有 `Trash2` 垃圾桶按鈕一鍵移除。
+export type RetirementConfig = {
+  age: number;              // 目前年齡
+  monthly_spending: number; // 退休後每月生活費
+  monthly_invest: number;   // 退休前每月持續投入額
+  expected_return: number;  // 預期年化報酬率，例如 0.07
+  inflation: number;        // 年通膨率，例如 0.02
+};
 
-* **輸入與編輯欄位**：
-  * 本次預計投入總台幣金額 ($Amt_{TWD}$)、當前美金匯率 ($ExRate$)。
-  * **目標權重編輯**：表格內「目標權重」欄位為可直接微調之 `Input` 框。
-  * **資產屬性切換**：每檔 ETF 提供可互動的資產類型切換 Badge（📈 股票型 `stock` / 🛡️ 債券型 `bond`），點擊即時取反屬性。
+export type AiPortfolioState = {
+  portfolio: Portfolio;
+  allocation_target: AllocationTarget;
+  retirement: RetirementConfig;
+};
+```
 
-* **核心連動邏輯 (雙向自動連動與 100% 紀律)**：
-  1. **正向連動 (C ➡️ A/B)**：當自訂目標權重時，累加總權重。
-     * **100% 嚴謹紀律條件**：若總權重剛好等於 **100%**，系統加總所有股票型（`stock`）ETF 權重，自動更新全站 `stockPercent` 並同步至模組 A 與 B，且表格上方亮起翡翠綠的連動提示條。
-     * **暫停連動條件**：若總權重不等於 100%，表格上方亮起黃色警告條並暫停連動，保持上一次有效狀態。
-  2. **反向連動 (A ➡️ C)**：在 100% 同步狀態下調整模組 A 滑桿時，自訂配置中股票與債券類 ETF 目標權重按滑桿比例**等比例等量縮放**，總和仍維持 100%。
-  3. **預設資產屬性地圖**：
-     * **股票/風險資產型 (`stock`)**：VT, VTI, VXUS, VNQ, DBC。
-     * **債券/固定收益型 (`bond`)**：BNDW, BND, BNDX。
-
-* **無損資料防禦**：當投入金額或匯率為 0 時，表格仍完好呈現標的，下單股數、分配美金無損以 0 展示，保證自由微調。
-* **API 邏輯**：系統自動換算總美金，並抓取各 ETF 的最新即時市價 ($Price_{ETF}$)。
-* **計算表格輸出**：
-  $$\text{各標的分配美金} = (Amt_{TWD} \div ExRate) \times \text{該標的設定比重}$$
-  $$\text{應買進股數} = \lfloor \text{各標的分配美金} \div Price_{ETF} \rfloor$$
-  $$\text{預估剩餘現金} = \text{各標的分配美金} - (\text{應買進股數} \times Price_{ETF})$$
-
-
----
-
-### 模組 D：資產健康檢查與再平衡 (Health Check & Rebalancing)
-
-#### 功能 D1：雙軌智慧再平衡與健康檢查計算機
-
-* **UI 佈局與元素**：
-  * **1/3 與 2/3 雙欄響應式佈局**：左側 1/3 為現有持股股數輸入與 Yahoo 即時市價同步面板，右側 2/3 為健康度大牌、Recharts 柱形圖與交易行動建議。
-  * **Recharts Before-vs-After 實際/平衡後雙柱權重對比圖**：直觀展示各資產「目前實際權重 %」與「平衡後目標權重 %」之偏差對比。
-  * **Yahoo 最新市價一鍵同步按鈕**：微動態旋轉載入按鈕，點擊時透過 Yahoo Finance API 背景獲取美股/台股即時市價與匯率。
-
-* **輸入與自訂型態**：
-  * 使用者輸入當前持有各標的之 `實際現有股數`。
-  * **再平衡模式 (rebalanceMode)**：`exact` (精準買賣) | `cashflow` (新資金只買不賣)。
-  * **新入金 (newFundsInputTWD)**：僅在 `cashflow` 模式下展示，用於輸入預備再平衡的新台幣金額。
-
-* **核心再平衡演算法**：
-  1. **總市值與現有權重計算**：
-     $$\text{實際總市值 } V_{total} = \sum (\text{實際股數} \times Price_{ETF} \times ExRate)$$
-     $$\text{目前實際權重 } W_{i} = \frac{\text{實際市值}_i}{V_{total}}$$
-     若偏離度 $|\Delta W_i| = |W_i - \text{目標權重}_i| \ge 5\%$，該行高亮顯示黃色警示。
-  2. **🔄 精準買賣再平衡模式 (Exact Mode)**：
-     旨在完全恢復黃金比例的雙向平衡。
-     $$\text{目標理想市值 } V_{ideal, i} = V_{total} \times \text{目標權重}_i$$
-     $$\text{交易市值缺口 } \text{Gap}_i = V_{ideal, i} - \text{實際市值}_i$$
-     $$\text{應交易股數 } \text{actionShares}_i = \frac{\text{Gap}_i}{\text{單價} \times ExRate}$$
-     正值為「買進」，負值為「賣出」（無條件捨去取整數）。
-  3. **💰 新資金只買不賣再平衡模式 (Cash-Flow Mode - 智慧缺口分配演算法)**：
-     保證「不賣出任何股票」，僅以新入金 $F_{new}$ 漸進式平衡。
-     * **預估平衡後總市值**：$V_{next} = V_{total} + F_{new}$
-     * **預估理想市值**：$V_{next\_ideal, i} = V_{next} \times \text{目標權重}_i$
-     * **市值缺口**：$\text{Gap}_i = V_{next\_ideal, i} - \text{實際市值}_i$
-     * **正缺口分配（低配資產）**：若 $\text{Gap}_i \le 0$，則 $\text{allocatedTWD}_i = 0$。對於所有正缺口標的，按其缺口比例分配新資金：
-       $$\text{allocatedTWD}_i = F_{new} \times \frac{\text{Gap}_i}{\sum_{\text{Gap}_j > 0} \text{Gap}_j}$$
-     * **應交易股數**：
-       $$\text{actionShares}_i = \lfloor \frac{\text{allocatedTWD}_i}{Price_{ETF} \times ExRate} \rfloor$$
-       *此演算法完美保證 $\text{actionShares}_i \ge 0$，杜絕賣出交易。*
-
-* **跨模組自訂標的一體化連動**：
-  * 在模組 D 新增自訂標的時，自動呼叫 `setTargetWeight(sym, 0)` 同步註冊至模組 C；在模組 D 點擊垃圾桶刪除時，同步於模組 C 清除，實現全站數據共享。
-
-
-
+### 狀態防禦與變動廣播機制
+1. **資料初始化**：系統會自動嘗試從 `localStorage.getItem('aiPortfolio')` 讀取並解析資料。若解析失敗或為空，則採用精緻的預設資產數值（例如：總市值約 123 萬，並包含最近 7 個月的歷史數據點）。
+2. **自動歷史對齊**：當調用 `updatePortfolioAsset` 更新某個資產金額時，系統會自動重新加總所有資產，並**動態重寫或新增 history 歷史列表中的最後一個數據點**，隨後將其同步持久化到 `localStorage` 中。
 
 ---
 
-## 4. UI/UX 視覺與操作指引 (UI/UX Guidelines)
+## 4. 三大財務計算引擎核心公式
 
-* **設計風格 (Theme)**：
-* **主色調**：採用深海藍（#1E3A8A）與翡翠綠（#10B981），營造專業、穩健、高信任感的財經工具氛圍。
-* **嚴禁顏色**：避免使用大面積的投機型紅綠閃爍色，強調長期持有的沉穩。
+### 4.1 智慧再平衡演算法 (`src/utils/rebalance.ts`)
 
+#### 1. 精準買賣再平衡模式 (Exact Rebalance)
+旨在完全恢復黃金比例的雙向交易計算。設 $V_{total}$ 為總市值，$Price_i$ 為標的單價，$T_i$ 為目標權重：
+$$\text{理想目標市值 } V_{ideal, i} = V_{total} \times T_i$$
+$$\text{交易金額缺口 } \text{Gap}_i = V_{ideal, i} - \text{實際市值}_i$$
+$$\text{應交易股數 } \text{actionShares}_i = \lfloor \frac{\text{Gap}_i}{Price_i} \rfloor$$
+*（正值為「買進」，負值為「賣出」）*
 
-* **響應式佈局 (RWD)**：
-* 桌面端：採用雙欄佈局（左側輸入參數/滑桿，右側即時連動圖表與計算結果）。
-* 行動端：採用流動式單欄卡片佈局，計算表格需支援橫向滾動（Overflow-X）。
+#### 2. 新資金只買不賣再平衡模式 (Cash-Flow Rebalancing)
+**核心思想**：不賣出任何現有股票（免交易手續費），僅將新入金 $F_{new}$ 單向分配給低配資產：
+* 預估平衡後總市值：$V_{next} = V_{total} + F_{new}$
+* 各標的預估理想目標市值：$V_{next\_ideal, i} = V_{next} \times T_i$
+* 實質市值缺口：$\text{Gap}_i = V_{next\_ideal, i} - \text{實際市值}_i$
+* **智慧分配演算法（僅分配正缺口標的）**：若 $\text{Gap}_i \le 0$，則分配金額 $allocated_i = 0$。對於所有低配標的（即 $\text{Gap}_i > 0$）：
+  $$allocated_i = F_{new} \times \frac{\text{Gap}_i}{\sum_{\text{Gap}_j > 0} \text{Gap}_j}$$
+  $$\text{應買進股數 } \text{actionShares}_i = \lfloor \frac{allocated_i}{Price_i} \rfloor$$
+  *此演算法完美確保 $\text{actionShares}_i \ge 0$，杜絕賣出交易。*
 
+#### 3. 偏離門檻再平衡模式 (Threshold Rebalance)
+只有當某資產類別的實際權重與目標權重偏離程度 $|\Delta W_i| \ge \text{threshold}$ 時，才生成該標的的買賣再平衡金額，否則保持 $0$ 不動。
 
-* **狀態保存**：使用 `localStorage` 自動保存使用者的輸入參數（如年齡、目標、持股數），確保使用者下次重新打開網頁時，資料不會遺失。
 ---
+
+### 4.2 退休規劃與 Monte Carlo 隨機模擬 (`src/utils/retirement.ts`)
+
+#### 1. 實質年化報酬率 ($r_{real}$)
+考量長期通膨對購買力的蠶食，公式如下，並設置 $1\%$ 的安全下限防禦：
+$$r_{real} = \max(0.01, r - \text{inflation})$$
+
+#### 2. 目標資產總額 ($Target$) 逆推
+* **4% 提領法則 (Trinity Study)**：
+  $$Target = (\text{月生活費} \times 12) \div 0.04$$
+* **蓋頓-克林格動態提領 (Guyton-Klinger)**：初始提領率設為較積極的 $5\%$：
+  $$Target = (\text{月生活費} \times 12) \div 0.05$$
+  * **富裕增領與防禦減領雙護欄**：
+    $$\text{富裕增領臨界資產} = Target \times 1.2$$
+    $$\text{防禦減領臨界資產} = Target \times 0.8$$
+* **財產歸零提領 (Die to Zero)**：採用年金現值逆推公式（退休存活年期為 $N_{surv}$）：
+  $$Target = (\text{月生活費} \times 12) \times \frac{1 - (1 + r_{real})^{-N_{surv}}}{r_{real}}$$
+
+#### 3. Monte Carlo 隨機軌跡模擬
+模擬退休資產在未來 $n$ 年的隨機消長。系統採用 **幾何布朗運動 (Geometric Brownian Motion)**，在每一年迭代中生成隨機增長軌跡。設定資產年化報酬率為 $r$，波動率（標準差）固定設為 $\sigma = 0.15$：
+$$V_{t} = (V_{t-1} + PMT) \times \exp\left( \left(r - \frac{\sigma^2}{2}\right) \times 1 + \sigma \times Z \right)$$
+其中 $Z \sim N(0,1)$ 為標準常態分佈之隨機變數。
+* **成功率定義**：重複進行 $1,000$ 次獨立軌跡模擬，計算在退休年齡點其實際累積資產 $V_n \ge Target$ 的模擬次數佔比，得出最終「退休成功率 %」。
+
+---
+
+### 4.3 情境預演與壓力測試 (`src/utils/scenario.ts`)
+
+情境預演為純函數（Pure Function）運算，絕不直接污染全域狀態：
+
+* **💥 市場劇烈崩跌 -10%**：
+  $$tw\_stock_{new} = tw\_stock \times 0.9$$
+  $$us\_stock_{new} = us\_stock \times 0.9$$
+* **🚀 美股大牛市 +20%**：
+  $$us\_stock_{new} = us\_stock \times 1.2$$
+* **💵 美元飆升至 35 TWD**（假設基準匯率為 30）：
+  $$us\_stock_{new} = us\_stock \times \frac{35}{30}$$
+* **🔥 惡性通膨危機**：
+  $$\text{inflation}_{new} = 0.05$$
+
+---
+
+## 5. UI/UX 視覺美學與高品質組件規範
+
+為營造極致的 Premium 視覺美感，全站遵循以下設計系統：
+
+### 5.1 配色與主題 (HSL Custom Palettes)
+* **主色系**：深海藍（#1e3a8a）與翡翠綠（#10b981），傳遞穩健與高信任感。
+* **大類資產配對色盤**：
+  - **股票型 (Stock) 系列**：採用漸變藍色系（例如 `#3b82f6` 至 `#1d4ed8`）
+  - **債券/基金 (Bond/Fund) 系列**：採用穩重的 Slate 灰色系（例如 `#64748b` 至 `#334155`）
+  - **現金 (Cash) 類**：採用溫和的翠綠色系（例如 `#10b981`）
+  - **加密貨幣 (Crypto)**：採用科技感的紫色與金黃色系（例如 `#f59e0b` / `#8b5cf6`）
+
+### 5.2 磨砂玻璃 (Glassmorphism) 卡片樣式
+```css
+.card-premium {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 10px 25px -5px rgba(148, 163, 184, 0.05),
+              0 8px 10px -6px rgba(148, 163, 184, 0.05);
+  border-radius: 24px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-premium:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 25px -5px rgba(148, 163, 184, 0.1),
+              0 10px 10px -5px rgba(148, 163, 184, 0.04);
+}
+```
+
+### 5.3 互動動畫與微動態效果
+- **淡入效果**：全站頁面切換配有 `animate-fade-in`，持續時間 0.4s，營造流暢平滑的頁面加載感。
+- **壓力測試按鈕**：啟用狀態時配有 `animate-pulse` 微波脈衝光影，以及 `scale-[1.03]` 與 `ring-2 ring-blue-400/40` 的高亮聚焦。
+- **SVG 半圓儀表板**：指針轉動使用 transition CSS 動態，讓成功率指標在切換參數時，指針能夠優雅且平滑地轉動，而非瞬間跳躍。
+- **RWD 表格滾動**：所有資料與下單表格外層包裹 `overflow-x-auto`，確保在手機小螢幕下提供順暢的手勢橫向滑動，防堵排版擠壓。
