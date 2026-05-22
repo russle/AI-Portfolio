@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { ProgressBar } from '../components/ProgressBar';
 import { LineChart } from '../components/LineChart';
+import { StackedAreaChart } from '../components/StackedAreaChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { calculateTotalPortfolioValue } from '../utils/rebalance';
 import { 
@@ -14,13 +15,57 @@ import {
   Eye, 
   ShoppingBag,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  Download,
+  Upload,
+  Database,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 
+// 還原資料的欄位合法性校驗
+const validateImportedState = (data: any): boolean => {
+  if (!data || typeof data !== 'object') return false;
+  if (!data.portfolio || !data.allocation_target || !data.retirement) return false;
+  
+  const { portfolio, allocation_target, retirement } = data;
+  
+  if (
+    typeof portfolio.cash !== 'number' ||
+    typeof portfolio.fund !== 'number' ||
+    typeof portfolio.tw_stock !== 'number' ||
+    typeof portfolio.us_stock !== 'number' ||
+    typeof portfolio.crypto !== 'number' ||
+    !Array.isArray(portfolio.history)
+  ) return false;
+  
+  if (
+    typeof allocation_target.tw_stock !== 'number' ||
+    typeof allocation_target.us_stock !== 'number' ||
+    typeof allocation_target.bond !== 'number' ||
+    typeof allocation_target.cash !== 'number' ||
+    typeof allocation_target.crypto !== 'number'
+  ) return false;
+  
+  if (
+    typeof retirement.age !== 'number' ||
+    typeof retirement.monthly_spending !== 'number' ||
+    typeof retirement.monthly_invest !== 'number' ||
+    typeof retirement.expected_return !== 'number' ||
+    typeof retirement.inflation !== 'number'
+  ) return false;
+  
+  return true;
+};
+
 export const OverviewPage: React.FC = () => {
-  const { state } = useApp();
+  const { state, importState } = useApp();
   const navigate = useNavigate();
   const { portfolio, allocation_target, retirement } = state;
+
+  const [chartView, setChartView] = useState<'line' | 'stacked'>('line');
+  const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 1. 淨資產計算
   const totalNetWorth = useMemo(() => {
@@ -53,7 +98,6 @@ export const OverviewPage: React.FC = () => {
     const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
     
     if (diffYears < 0.05 || startPoint.net_worth <= 0) {
-      // 時間太短，改算簡單收益率
       return ((endPoint.net_worth - startPoint.net_worth) / startPoint.net_worth);
     }
     
@@ -71,14 +115,14 @@ export const OverviewPage: React.FC = () => {
     return (totalNetWorth / fireTarget) * 100;
   }, [totalNetWorth, fireTarget]);
 
-  // 5. 偏離警示：檢查當前資產佔比與目標配置是否有大於 5% (0.05) 的偏離
+  // 5. 偏離警示
   const deviationAlertMessage = useMemo(() => {
     if (totalNetWorth <= 0) return null;
     
     const actualPercents = {
       tw_stock: portfolio.tw_stock / totalNetWorth,
       us_stock: portfolio.us_stock / totalNetWorth,
-      bond: portfolio.fund / totalNetWorth, // 基金/債券映射至目標 bond
+      bond: portfolio.fund / totalNetWorth,
       cash: portfolio.cash / totalNetWorth,
       crypto: portfolio.crypto / totalNetWorth
     };
@@ -91,7 +135,6 @@ export const OverviewPage: React.FC = () => {
       { name: '加密貨幣', diff: actualPercents.crypto - allocation_target.crypto }
     ];
 
-    // 篩選出偏差絕對值 >= 5% 的項目
     const highDeviations = deviations.filter(d => Math.abs(d.diff) >= 0.05);
     
     if (highDeviations.length > 0) {
@@ -104,6 +147,64 @@ export const OverviewPage: React.FC = () => {
 
     return null;
   }, [portfolio, allocation_target, totalNetWorth]);
+
+  // 備份匯出處理
+  const handleExport = () => {
+    try {
+      const dataStr = JSON.stringify(state, null, 2);
+      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+      const url = URL.createObjectURL(dataBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `ai_portfolio_backup_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+      setBackupMsg({ type: 'success', text: '💾 備份檔案已成功匯出並下載！' });
+      setTimeout(() => setBackupMsg(null), 4000);
+    } catch (e) {
+      setBackupMsg({ type: 'error', text: '❌ 匯出備份失敗，請稍後再試。' });
+      setTimeout(() => setBackupMsg(null), 4000);
+    }
+  };
+
+  // 備份導入還原處理
+  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result;
+        if (typeof text !== 'string') return;
+        const parsed = JSON.parse(text);
+        
+        if (validateImportedState(parsed)) {
+          const confirmRestore = window.confirm(
+            '⚠️ 警告：還原此備份將會完全覆蓋您目前的資產資料、目標比例與退休規劃參數，此操作無法復原。是否確定繼續？'
+          );
+          if (confirmRestore) {
+            importState(parsed);
+            setBackupMsg({ type: 'success', text: '🎉 資料已成功還原！網頁將立即重新整理。' });
+            setTimeout(() => {
+              window.location.reload();
+            }, 1200);
+          }
+        } else {
+          setBackupMsg({ type: 'error', text: '❌ 備份檔格式無效，請確保上傳的是正確的備份 JSON。' });
+          setTimeout(() => setBackupMsg(null), 5000);
+        }
+      } catch (err) {
+        setBackupMsg({ type: 'error', text: '❌ 讀取備份檔案失敗，JSON 解析錯誤。' });
+        setTimeout(() => setBackupMsg(null), 5000);
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = '';
+  };
 
   return (
     <div className="space-y-8 animate-fade-in duration-300">
@@ -163,32 +264,69 @@ export const OverviewPage: React.FC = () => {
       {/* 中間主要圖表區域 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* 左側：資產成長趨勢折線圖 */}
+        {/* 左側：資產成長趨勢折線圖 / 堆疊面積圖 */}
         <div className="lg:col-span-2">
           <Card hoverEffect={false} className="flex flex-col h-full">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h2 className="text-base font-bold text-slate-800">淨資產成長軌跡</h2>
-                <p className="text-xs font-semibold text-slate-400">展示最近歷史記點的本金與複利累積實況</p>
+                <h2 className="text-base font-bold text-slate-800">資產歷史趨勢</h2>
+                <p className="text-xs font-semibold text-slate-400">
+                  {chartView === 'line' ? '展示最近歷史記點的本金與複利累積實況' : '細分資產在各個歷史快照的消長結構'}
+                </p>
               </div>
-              <span className="p-2 bg-blue-50 text-blue-600 rounded-xl">
-                <TrendingUp className="w-5 h-5" />
-              </span>
+              
+              <div className="flex items-center gap-3">
+                {/* 雙視角 Segmented Control */}
+                <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 text-[10px] font-bold select-none">
+                  <button
+                    onClick={() => setChartView('line')}
+                    className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ${
+                      chartView === 'line'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    📈 淨資產趨勢
+                  </button>
+                  <button
+                    onClick={() => setChartView('stacked')}
+                    className={`px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-200 ${
+                      chartView === 'stacked'
+                        ? 'bg-white text-blue-600 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    📊 資產消長
+                  </button>
+                </div>
+                
+                <span className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+                  <TrendingUp className="w-5 h-5" />
+                </span>
+              </div>
             </div>
             
             <div className="flex-1 min-h-[280px] flex items-center">
-              <LineChart 
-                data={portfolio.history} 
-                xKey="date" 
-                lines={[{ key: 'net_worth', name: '淨資產淨值', stroke: '#3b82f6' }]} 
-              />
+              {chartView === 'line' ? (
+                <LineChart 
+                  data={portfolio.history} 
+                  xKey="date" 
+                  lines={[{ key: 'net_worth', name: '淨資產淨值', stroke: '#3b82f6' }]} 
+                />
+              ) : (
+                <StackedAreaChart 
+                  data={portfolio.history} 
+                  xKey="date" 
+                />
+              )}
             </div>
           </Card>
         </div>
 
-        {/* 右側：被動投資哲學宣導與概覽說明 */}
-        <div>
-          <Card hoverEffect={false} className="flex flex-col h-full bg-slate-900 border-transparent text-slate-200">
+        {/* 右側：被動投資宣導 + 數據備份與還原 */}
+        <div className="flex flex-col gap-6">
+          {/* 上部：宣導卡片 */}
+          <Card hoverEffect={false} className="flex flex-col bg-slate-900 border-transparent text-slate-200">
             <div className="mb-6">
               <h2 className="text-base font-bold text-white">經典指數化配置戰略</h2>
               <p className="text-xs text-slate-400 mt-1">傳承長期持有與鐵律再平衡的資產防禦板塊</p>
@@ -204,6 +342,59 @@ export const OverviewPage: React.FC = () => {
               <p className="border-t border-slate-800 pt-4 text-[10px] text-slate-500 font-semibold">
                 提示：如當前財務指標出現「偏離警示」，代表個別資產已產生漂移，請前往平衡控制台調整以規避過度風險。
               </p>
+            </div>
+          </Card>
+
+          {/* 下部：資料安全與備份控制面板 */}
+          <Card hoverEffect={false} className="flex flex-col bg-white/70 backdrop-blur-md border border-slate-200/80 shadow-md">
+            <div className="flex items-center gap-3 mb-4 select-none">
+              <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Database className="w-5 h-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-black text-slate-800">資料安全與備份控制台</h2>
+                <p className="text-[10px] text-slate-400 font-bold">本地數據一鍵下載與備份還原</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-[11px] leading-relaxed text-slate-500">
+                由於目前數據安全儲存於您的瀏覽器本地空間，建議定期下載備份檔案以防資產歷史丟失。
+              </p>
+
+              {backupMsg && (
+                <div className={`p-2.5 rounded-xl text-[10px] font-bold flex items-center gap-2 select-none ${
+                  backupMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
+                }`}>
+                  {backupMsg.type === 'success' ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+                  <span>{backupMsg.text}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3 pt-1.5">
+                <button
+                  onClick={handleExport}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  匯出備份 (JSON)
+                </button>
+
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                >
+                  <Upload className="w-3.5 h-3.5 text-indigo-500" />
+                  導入備份檔案
+                </button>
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleImport}
+                  accept=".json"
+                  className="hidden"
+                />
+              </div>
             </div>
           </Card>
         </div>

@@ -3,6 +3,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 export type PortfolioHistoryPoint = {
   date: string;      // YYYY-MM-DD
   net_worth: number;
+  cash?: number;
+  fund?: number;
+  tw_stock?: number;
+  us_stock?: number;
+  crypto?: number;
 };
 
 export type Portfolio = {
@@ -43,6 +48,7 @@ export interface AppContextProps {
   updateRetirementConfig: (key: keyof RetirementConfig, value: number) => void;
   addHistoryPoint: (date: string, netWorth: number) => void;
   resetAll: () => void;
+  importState: (newState: AiPortfolioState) => void;
 }
 
 const LOCAL_STORAGE_KEY = 'aiPortfolio';
@@ -55,13 +61,13 @@ const DEFAULT_STATE: AiPortfolioState = {
     us_stock: 450000,
     crypto: 30000,
     history: [
-      { date: '2025-11-22', net_worth: 800000 },
-      { date: '2025-12-22', net_worth: 850000 },
-      { date: '2026-01-22', net_worth: 890000 },
-      { date: '2026-02-22', net_worth: 950000 },
-      { date: '2026-03-22', net_worth: 1020000 },
-      { date: '2026-04-22', net_worth: 1100000 },
-      { date: '2026-05-22', net_worth: 1230000 }, // 等於 cash + fund + tw_stock + us_stock + crypto 總和
+      { date: '2025-11-22', net_worth: 800000, cash: 150000, fund: 100000, tw_stock: 250000, us_stock: 280000, crypto: 20000 },
+      { date: '2025-12-22', net_worth: 850000, cash: 160000, fund: 110000, tw_stock: 270000, us_stock: 290000, crypto: 20000 },
+      { date: '2026-01-22', net_worth: 890000, cash: 170000, fund: 120000, tw_stock: 280000, us_stock: 300000, crypto: 20000 },
+      { date: '2026-02-22', net_worth: 950000, cash: 180000, fund: 130000, tw_stock: 300000, us_stock: 310000, crypto: 30000 },
+      { date: '2026-03-22', net_worth: 1020000, cash: 190000, fund: 140000, tw_stock: 320000, us_stock: 340000, crypto: 30000 },
+      { date: '2026-04-22', net_worth: 1100000, cash: 195000, fund: 145000, tw_stock: 350000, us_stock: 380000, crypto: 30000 },
+      { date: '2026-05-22', net_worth: 1230000, cash: 200000, fund: 150000, tw_stock: 400000, us_stock: 450000, crypto: 30000 },
     ]
   },
   allocation_target: {
@@ -82,17 +88,70 @@ const DEFAULT_STATE: AiPortfolioState = {
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
 
+const migrateHistory = (history: any[], currentPortfolio: Omit<Portfolio, 'history'>): PortfolioHistoryPoint[] => {
+  const currentSum = 
+    currentPortfolio.cash + 
+    currentPortfolio.fund + 
+    currentPortfolio.tw_stock + 
+    currentPortfolio.us_stock + 
+    currentPortfolio.crypto;
+
+  return history.map(point => {
+    if (
+      point.cash !== undefined &&
+      point.fund !== undefined &&
+      point.tw_stock !== undefined &&
+      point.us_stock !== undefined &&
+      point.crypto !== undefined
+    ) {
+      return point as PortfolioHistoryPoint;
+    }
+
+    const total = point.net_worth;
+    if (currentSum === 0) {
+      return {
+        ...point,
+        cash: Math.round(total * 0.1),
+        fund: Math.round(total * 0.15),
+        tw_stock: Math.round(total * 0.3),
+        us_stock: Math.round(total * 0.4),
+        crypto: Math.round(total * 0.05)
+      };
+    }
+
+    const ratio = total / currentSum;
+    return {
+      ...point,
+      cash: Math.round(currentPortfolio.cash * ratio),
+      fund: Math.round(currentPortfolio.fund * ratio),
+      tw_stock: Math.round(currentPortfolio.tw_stock * ratio),
+      us_stock: Math.round(currentPortfolio.us_stock * ratio),
+      crypto: Math.round(currentPortfolio.crypto * ratio)
+    };
+  });
+};
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AiPortfolioState>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // 合併預設值防禦
+        const portfolio = parsed.portfolio || {};
+        const history = portfolio.history || [];
+        const migratedHistory = migrateHistory(history, {
+          cash: portfolio.cash !== undefined ? portfolio.cash : DEFAULT_STATE.portfolio.cash,
+          fund: portfolio.fund !== undefined ? portfolio.fund : DEFAULT_STATE.portfolio.fund,
+          tw_stock: portfolio.tw_stock !== undefined ? portfolio.tw_stock : DEFAULT_STATE.portfolio.tw_stock,
+          us_stock: portfolio.us_stock !== undefined ? portfolio.us_stock : DEFAULT_STATE.portfolio.us_stock,
+          crypto: portfolio.crypto !== undefined ? portfolio.crypto : DEFAULT_STATE.portfolio.crypto,
+        });
+
         return {
           portfolio: {
             ...DEFAULT_STATE.portfolio,
-            ...(parsed.portfolio || {})
+            ...portfolio,
+            history: migratedHistory
           },
           allocation_target: {
             ...DEFAULT_STATE.allocation_target,
@@ -122,7 +181,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         [key]: Math.max(0, value)
       };
       
-      // 動態更新歷史紀錄中的最後一筆，使其對齊最新的資產加總
       const netWorthSum = 
         updatedPortfolio.cash + 
         updatedPortfolio.fund + 
@@ -131,14 +189,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedPortfolio.crypto;
         
       const newHistory = [...updatedPortfolio.history];
+      const newPoint: PortfolioHistoryPoint = {
+        date: newHistory.length > 0 ? newHistory[newHistory.length - 1].date : new Date().toISOString().split('T')[0],
+        net_worth: netWorthSum,
+        cash: updatedPortfolio.cash,
+        fund: updatedPortfolio.fund,
+        tw_stock: updatedPortfolio.tw_stock,
+        us_stock: updatedPortfolio.us_stock,
+        crypto: updatedPortfolio.crypto
+      };
+
       if (newHistory.length > 0) {
-        newHistory[newHistory.length - 1] = {
-          ...newHistory[newHistory.length - 1],
-          net_worth: netWorthSum
-        };
+        newHistory[newHistory.length - 1] = newPoint;
       } else {
-        const todayStr = new Date().toISOString().split('T')[0];
-        newHistory.push({ date: todayStr, net_worth: netWorthSum });
+        newHistory.push(newPoint);
       }
 
       return {
@@ -175,10 +239,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => {
       const updatedHistory = [...prev.portfolio.history];
       const existIndex = updatedHistory.findIndex(p => p.date === date);
+      
+      const currentDetail = {
+        cash: prev.portfolio.cash,
+        fund: prev.portfolio.fund,
+        tw_stock: prev.portfolio.tw_stock,
+        us_stock: prev.portfolio.us_stock,
+        crypto: prev.portfolio.crypto
+      };
+      
+      const currentSum = currentDetail.cash + currentDetail.fund + currentDetail.tw_stock + currentDetail.us_stock + currentDetail.crypto;
+      
+      const getProportionalDetail = (targetNetWorth: number) => {
+        if (currentSum === 0) {
+          return {
+            cash: Math.round(targetNetWorth * 0.1),
+            fund: Math.round(targetNetWorth * 0.15),
+            tw_stock: Math.round(targetNetWorth * 0.3),
+            us_stock: Math.round(targetNetWorth * 0.4),
+            crypto: Math.round(targetNetWorth * 0.05)
+          };
+        }
+        const ratio = targetNetWorth / currentSum;
+        return {
+          cash: Math.round(currentDetail.cash * ratio),
+          fund: Math.round(currentDetail.fund * ratio),
+          tw_stock: Math.round(currentDetail.tw_stock * ratio),
+          us_stock: Math.round(currentDetail.us_stock * ratio),
+          crypto: Math.round(currentDetail.crypto * ratio)
+        };
+      };
+
+      const detail = getProportionalDetail(netWorth);
+
+      const newPoint: PortfolioHistoryPoint = {
+        date,
+        net_worth: netWorth,
+        ...detail
+      };
+
       if (existIndex >= 0) {
-        updatedHistory[existIndex].net_worth = netWorth;
+        updatedHistory[existIndex] = newPoint;
       } else {
-        updatedHistory.push({ date, net_worth: netWorth });
+        updatedHistory.push(newPoint);
         // 按日期排序
         updatedHistory.sort((a, b) => a.date.localeCompare(b.date));
       }
@@ -197,6 +300,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(DEFAULT_STATE));
   };
 
+  const importState = (newState: AiPortfolioState) => {
+    setState(newState);
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newState));
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -205,7 +313,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateAllocationTarget,
         updateRetirementConfig,
         addHistoryPoint,
-        resetAll
+        resetAll,
+        importState
       }}
     >
       {children}
