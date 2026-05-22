@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState } from '../context/AppContext';
+import type { AiPortfolioState, AssetClassKey } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { Gauge } from '../components/Gauge';
 import { ScenarioButton } from '../components/ScenarioButton';
@@ -94,10 +94,9 @@ export const ScenarioPage: React.FC = () => {
       
       // 寫回 Portfolio
       const p = projectedState.portfolio;
-      (Object.keys(p) as Array<keyof typeof p>).forEach(key => {
-        if (key !== 'history') {
-          updatePortfolioAsset(key, p[key] as number);
-        }
+      const assetKeys: AssetClassKey[] = ['cash', 'fund', 'tw_stock', 'us_stock', 'crypto'];
+      assetKeys.forEach(key => {
+        updatePortfolioAsset(key, p[key] as number);
       });
 
       // 寫回 Retirement Config
@@ -290,49 +289,51 @@ export const ScenarioPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/80 text-sm font-medium text-slate-600">
-              {(Object.keys(portfolio) as Array<keyof typeof portfolio>).map(key => {
-                if (key === 'history') return null;
-                const baseVal = portfolio[key];
-                const projVal = projectedState.portfolio[key];
-                const changeVal = projVal - baseVal;
-                const changePct = baseVal > 0 ? (changeVal / baseVal) * 100 : 0;
-                
-                let changeStyle = 'text-slate-400';
-                if (changeVal > 0) {
-                  changeStyle = 'text-emerald-600 font-bold';
-                } else if (changeVal < 0) {
-                  changeStyle = 'text-rose-600 font-bold';
-                }
+              {(() => {
+                const assetKeys: AssetClassKey[] = ['cash', 'fund', 'tw_stock', 'us_stock', 'crypto'];
+                return assetKeys.map(key => {
+                  const baseVal = portfolio[key] || 0;
+                  const projVal = projectedState.portfolio[key] || 0;
+                  const changeVal = projVal - baseVal;
+                  const changePct = baseVal > 0 ? (changeVal / baseVal) * 100 : 0;
+                  
+                  let changeStyle = 'text-slate-400';
+                  if (changeVal > 0) {
+                    changeStyle = 'text-emerald-600 font-bold';
+                  } else if (changeVal < 0) {
+                    changeStyle = 'text-rose-600 font-bold';
+                  }
 
-                return (
-                  <tr key={key} className="hover:bg-slate-50/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-slate-700">
-                        {key === 'cash' && '現金 (Cash)'}
-                        {key === 'fund' && '基金/債券 (Fund/Bond)'}
-                        {key === 'tw_stock' && '台灣股票 (TW Stock)'}
-                        {key === 'us_stock' && '美國股票 (US Stock)'}
-                        {key === 'crypto' && '加密貨幣 (Crypto)'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right font-semibold text-slate-600">
-                      ${Math.round(baseVal).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right font-semibold text-slate-700">
-                      ${Math.round(projVal).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      {changeVal === 0 ? (
-                        <span className="text-slate-400 text-xs">無變動</span>
-                      ) : (
-                        <span className={`text-xs ${changeStyle}`}>
-                          {changeVal > 0 ? '+' : ''}${Math.round(changeVal).toLocaleString()} ({changePct > 0 ? '+' : ''}{changePct.toFixed(1)}%)
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+                  return (
+                    <tr key={key} className="hover:bg-slate-50/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-slate-700">
+                          {key === 'cash' && '現金 (Cash)'}
+                          {key === 'fund' && '基金/債券 (Fund/Bond)'}
+                          {key === 'tw_stock' && '台灣股票 (TW Stock)'}
+                          {key === 'us_stock' && '美國股票 (US Stock)'}
+                          {key === 'crypto' && '加密貨幣 (Crypto)'}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-600">
+                        ${Math.round(baseVal).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right font-semibold text-slate-700">
+                        ${Math.round(projVal).toLocaleString()}
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        {changeVal === 0 ? (
+                          <span className="text-slate-400 text-xs">無變動</span>
+                        ) : (
+                          <span className={`text-xs ${changeStyle}`}>
+                            {changeVal > 0 ? '+' : ''}${Math.round(changeVal).toLocaleString()} ({changePct > 0 ? '+' : ''}{changePct.toFixed(1)}%)
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>

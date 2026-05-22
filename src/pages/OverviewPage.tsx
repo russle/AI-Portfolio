@@ -40,6 +40,10 @@ const validateImportedState = (data: any): boolean => {
     !Array.isArray(portfolio.history)
   ) return false;
   
+  // [NEW] 支持 holdings 明細陣列與持股模式欄位校驗
+  if (portfolio.holdings !== undefined && !Array.isArray(portfolio.holdings)) return false;
+  if (portfolio.isHoldingMode !== undefined && typeof portfolio.isHoldingMode !== 'boolean') return false;
+  
   if (
     typeof allocation_target.tw_stock !== 'number' ||
     typeof allocation_target.us_stock !== 'number' ||
@@ -278,7 +282,14 @@ export const OverviewPage: React.FC = () => {
           <span className="text-2xl font-black text-slate-800 tracking-tight mt-1">
             ${totalNetWorth.toLocaleString()}
           </span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">即時資產市值加總</span>
+          <div className="flex flex-wrap items-center gap-1.5 mt-1 select-none">
+            <span className="text-[10px] text-slate-400 font-bold">即時資產市值加總</span>
+            {portfolio.isHoldingMode && (
+              <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200/80 px-1 py-0.5 rounded">
+                📊 持股模式
+              </span>
+            )}
+          </div>
         </Card>
 
         {/* 月增減 */}

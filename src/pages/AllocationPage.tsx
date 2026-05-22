@@ -5,7 +5,8 @@ import { PieChart } from '../components/PieChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { calculateTotalPortfolioValue } from '../utils/rebalance';
 import { Sliders, ShieldAlert, Award, RefreshCw } from 'lucide-react';
-import type { AllocationTarget, Portfolio } from '../context/AppContext';
+import type { AllocationTarget, AssetClassKey } from '../context/AppContext';
+import { HoldingsManager } from '../components/HoldingsManager';
 
 
 // 風險模式定義
@@ -69,7 +70,7 @@ export const AllocationPage: React.FC = () => {
     
     return [
       {
-        key: 'cash' as keyof Omit<Portfolio, 'history'>,
+        key: 'cash' as AssetClassKey,
         name: '現金 (Cash)',
         currentVal: portfolio.cash,
         currentPct: portfolio.cash / total,
@@ -77,7 +78,7 @@ export const AllocationPage: React.FC = () => {
         diffPct: (portfolio.cash / total) - allocation_target.cash
       },
       {
-        key: 'fund' as keyof Omit<Portfolio, 'history'>,
+        key: 'fund' as AssetClassKey,
         name: '基金/債券 (Fund/Bond)',
         currentVal: portfolio.fund,
         currentPct: portfolio.fund / total,
@@ -85,7 +86,7 @@ export const AllocationPage: React.FC = () => {
         diffPct: (portfolio.fund / total) - allocation_target.bond
       },
       {
-        key: 'tw_stock' as keyof Omit<Portfolio, 'history'>,
+        key: 'tw_stock' as AssetClassKey,
         name: '台灣股票 (TW Stock)',
         currentVal: portfolio.tw_stock,
         currentPct: portfolio.tw_stock / total,
@@ -93,7 +94,7 @@ export const AllocationPage: React.FC = () => {
         diffPct: (portfolio.tw_stock / total) - allocation_target.tw_stock
       },
       {
-        key: 'us_stock' as keyof Omit<Portfolio, 'history'>,
+        key: 'us_stock' as AssetClassKey,
         name: '美國股票 (US Stock)',
         currentVal: portfolio.us_stock,
         currentPct: portfolio.us_stock / total,
@@ -101,7 +102,7 @@ export const AllocationPage: React.FC = () => {
         diffPct: (portfolio.us_stock / total) - allocation_target.us_stock
       },
       {
-        key: 'crypto' as keyof Omit<Portfolio, 'history'>,
+        key: 'crypto' as AssetClassKey,
         name: '加密貨幣 (Crypto)',
         currentVal: portfolio.crypto,
         currentPct: portfolio.crypto / total,
@@ -168,6 +169,8 @@ export const AllocationPage: React.FC = () => {
     syncInputsFromGlobal(newTarget as any);
   };
 
+  const isHoldingMode = portfolio.isHoldingMode || false;
+
   // 現有實際資產手動微調 (允許直接在配置頁面微調金額以觸發連動)
   const [editingActuals, setEditingActuals] = useState({
     cash: portfolio.cash.toString(),
@@ -177,7 +180,18 @@ export const AllocationPage: React.FC = () => {
     crypto: portfolio.crypto.toString()
   });
 
-  const saveActualAssetValue = (key: keyof Omit<Portfolio, 'history'>, valStr: string) => {
+  // 當 portfolio 改變時，自動同步實際值狀態
+  React.useEffect(() => {
+    setEditingActuals({
+      cash: portfolio.cash.toString(),
+      fund: portfolio.fund.toString(),
+      tw_stock: portfolio.tw_stock.toString(),
+      us_stock: portfolio.us_stock.toString(),
+      crypto: portfolio.crypto.toString()
+    });
+  }, [portfolio]);
+
+  const saveActualAssetValue = (key: AssetClassKey, valStr: string) => {
     const val = Math.max(0, parseInt(valStr) || 0);
     updatePortfolioAsset(key, val);
   };
@@ -334,7 +348,9 @@ export const AllocationPage: React.FC = () => {
                               setEditingActuals(prev => ({ ...prev, [item.key]: sanitized }));
                             }}
                             onBlur={() => saveActualAssetValue(item.key, editingActuals[item.key])}
-                            className="w-28 px-2 py-1 text-xs border border-slate-200 rounded bg-white hover:border-blue-400 focus:border-blue-500 focus:outline-none font-bold"
+                            disabled={isHoldingMode && item.key !== 'cash'}
+                            className="w-28 px-2 py-1 text-xs border border-slate-200 rounded bg-white hover:border-blue-400 focus:border-blue-500 focus:outline-none font-bold disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-100"
+                            placeholder={isHoldingMode && item.key !== 'cash' ? '🔒 鎖定' : ''}
                           />
                         </td>
                         <td className="p-4 text-slate-500">{(item.currentPct * 100).toFixed(1)}%</td>
@@ -481,6 +497,9 @@ export const AllocationPage: React.FC = () => {
         </div>
 
       </div>
+
+      {/* 持股明細管理器 */}
+      <HoldingsManager />
 
     </div>
   );

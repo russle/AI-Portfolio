@@ -10,14 +10,28 @@ export type PortfolioHistoryPoint = {
   crypto?: number;
 };
 
+export type HoldingItem = {
+  id: string;          // 唯一識別碼
+  symbol: string;      // 標的代號，如 "0050.TW", "VT"
+  name: string;        // 標的名稱
+  shares: number;      // 股數
+  currentPrice: number;// 最新報價
+  currency: 'TWD' | 'USD';
+  assetType: 'tw_stock' | 'us_stock' | 'fund' | 'crypto';
+};
+
 export type Portfolio = {
   cash: number;
   fund: number;
   tw_stock: number;
   us_stock: number;
   crypto: number;
+  holdings?: HoldingItem[];    // [NEW] 持股明細
+  isHoldingMode?: boolean;     // [NEW] 是否啟用持股模式
   history: PortfolioHistoryPoint[];
 };
+
+export type AssetClassKey = 'cash' | 'fund' | 'tw_stock' | 'us_stock' | 'crypto';
 
 export type AllocationTarget = {
   tw_stock: number;  // 0~1 比例
@@ -43,7 +57,7 @@ export type AiPortfolioState = {
 
 export interface AppContextProps {
   state: AiPortfolioState;
-  updatePortfolioAsset: (key: keyof Omit<Portfolio, 'history'>, value: number) => void;
+  updatePortfolioAsset: (key: AssetClassKey, value: number) => void;
   updateAllocationTarget: (target: Partial<AllocationTarget>) => void;
   updateRetirementConfig: (key: keyof RetirementConfig, value: number) => void;
   addHistoryPoint: (date: string, netWorth: number) => void;
@@ -53,6 +67,12 @@ export interface AppContextProps {
     date: string,
     detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
   ) => void;
+  // [NEW] 持股管理 API
+  toggleHoldingMode: (enabled: boolean) => void;
+  addHolding: (holding: Omit<HoldingItem, 'id'>) => void;
+  deleteHolding: (id: string) => void;
+  updateHolding: (id: string, updates: Partial<HoldingItem>) => void;
+  refreshAllPrices: (usdRate?: number) => Promise<boolean>;
 }
 
 const LOCAL_STORAGE_KEY = 'aiPortfolio';
@@ -64,6 +84,12 @@ const DEFAULT_STATE: AiPortfolioState = {
     tw_stock: 400000,
     us_stock: 450000,
     crypto: 30000,
+    holdings: [
+      { id: '1', symbol: '0050.TW', name: '元大台灣50', shares: 2424, currentPrice: 165, currency: 'TWD', assetType: 'tw_stock' },
+      { id: '2', symbol: 'VT', name: '先鋒全球股票 ETF', shares: 125, currentPrice: 112, currency: 'USD', assetType: 'us_stock' },
+      { id: '3', symbol: 'BTC-USD', name: '比特幣', shares: 0.0139, currentPrice: 67000, currency: 'USD', assetType: 'crypto' }
+    ],
+    isHoldingMode: false,
     history: [
       { date: '2025-11-22', net_worth: 800000, cash: 150000, fund: 100000, tw_stock: 250000, us_stock: 280000, crypto: 20000 },
       { date: '2025-12-22', net_worth: 850000, cash: 160000, fund: 110000, tw_stock: 270000, us_stock: 290000, crypto: 20000 },
@@ -155,6 +181,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           portfolio: {
             ...DEFAULT_STATE.portfolio,
             ...portfolio,
+            holdings: portfolio.holdings || [],
+            isHoldingMode: portfolio.isHoldingMode || false,
             history: migratedHistory
           },
           allocation_target: {
@@ -178,7 +206,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(state));
   }, [state]);
 
-  const updatePortfolioAsset = (key: keyof Omit<Portfolio, 'history'>, value: number) => {
+  const updatePortfolioAsset = (key: AssetClassKey, value: number) => {
     setState(prev => {
       const updatedPortfolio = {
         ...prev.portfolio,
@@ -309,6 +337,228 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newState));
   };
 
+  // [NEW] 持股模式與累算同步
+  const toggleHoldingMode = (enabled: boolean) => {
+    setState(prev => {
+      const updatedPortfolio = {
+        ...prev.portfolio,
+        isHoldingMode: enabled
+      };
+
+      if (enabled) {
+        const holdingsList = updatedPortfolio.holdings || [];
+        
+        const sumByType = (type: HoldingItem['assetType']) => {
+          return holdingsList
+            .filter(h => h.assetType === type)
+            .reduce((sum, h) => {
+              const priceTwd = h.currency === 'USD' ? h.currentPrice * 32.2 : h.currentPrice;
+              return sum + Math.round(h.shares * priceTwd);
+            }, 0);
+        };
+
+        updatedPortfolio.tw_stock = sumByType('tw_stock');
+        updatedPortfolio.us_stock = sumByType('us_stock');
+        updatedPortfolio.fund = sumByType('fund');
+        updatedPortfolio.crypto = sumByType('crypto');
+
+        const netWorthSum = 
+          updatedPortfolio.cash + 
+          updatedPortfolio.fund + 
+          updatedPortfolio.tw_stock + 
+          updatedPortfolio.us_stock + 
+          updatedPortfolio.crypto;
+
+        const newHistory = [...updatedPortfolio.history];
+        const newPoint = {
+          date: newHistory.length > 0 ? newHistory[newHistory.length - 1].date : new Date().toISOString().split('T')[0],
+          net_worth: netWorthSum,
+          cash: updatedPortfolio.cash,
+          fund: updatedPortfolio.fund,
+          tw_stock: updatedPortfolio.tw_stock,
+          us_stock: updatedPortfolio.us_stock,
+          crypto: updatedPortfolio.crypto
+        };
+
+        if (newHistory.length > 0) {
+          newHistory[newHistory.length - 1] = newPoint;
+        } else {
+          newHistory.push(newPoint);
+        }
+        updatedPortfolio.history = newHistory;
+      }
+
+      return {
+        ...prev,
+        portfolio: updatedPortfolio
+      };
+    });
+  };
+
+  const syncHoldingsToState = (
+    holdingsList: HoldingItem[], 
+    cashVal: number, 
+    usdRate: number = 32.2
+  ) => {
+    setState(prev => {
+      const sumByType = (type: HoldingItem['assetType']) => {
+        return holdingsList
+          .filter(h => h.assetType === type)
+          .reduce((sum, h) => {
+            const priceTwd = h.currency === 'USD' ? h.currentPrice * usdRate : h.currentPrice;
+            return sum + Math.round(h.shares * priceTwd);
+          }, 0);
+      };
+
+      const tw_stock = sumByType('tw_stock');
+      const us_stock = sumByType('us_stock');
+      const fund = sumByType('fund');
+      const crypto = sumByType('crypto');
+
+      const netWorthSum = cashVal + fund + tw_stock + us_stock + crypto;
+
+      const newHistory = [...prev.portfolio.history];
+      const newPoint = {
+        date: newHistory.length > 0 ? newHistory[newHistory.length - 1].date : new Date().toISOString().split('T')[0],
+        net_worth: netWorthSum,
+        cash: cashVal,
+        fund,
+        tw_stock,
+        us_stock,
+        crypto
+      };
+
+      if (newHistory.length > 0) {
+        newHistory[newHistory.length - 1] = newPoint;
+      } else {
+        newHistory.push(newPoint);
+      }
+
+      return {
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          cash: cashVal,
+          tw_stock,
+          us_stock,
+          fund,
+          crypto,
+          holdings: holdingsList,
+          history: newHistory
+        }
+      };
+    });
+  };
+
+  const addHolding = (holding: Omit<HoldingItem, 'id'>) => {
+    setState(prev => {
+      const currentHoldings = prev.portfolio.holdings || [];
+      const newHolding: HoldingItem = {
+        ...holding,
+        id: Math.random().toString(36).substring(2, 9)
+      };
+      const updatedHoldings = [...currentHoldings, newHolding];
+
+      if (prev.portfolio.isHoldingMode) {
+        setTimeout(() => syncHoldingsToState(updatedHoldings, prev.portfolio.cash), 0);
+        return prev;
+      }
+
+      return {
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          holdings: updatedHoldings
+        }
+      };
+    });
+  };
+
+  const deleteHolding = (id: string) => {
+    setState(prev => {
+      const currentHoldings = prev.portfolio.holdings || [];
+      const updatedHoldings = currentHoldings.filter(h => h.id !== id);
+
+      if (prev.portfolio.isHoldingMode) {
+        setTimeout(() => syncHoldingsToState(updatedHoldings, prev.portfolio.cash), 0);
+        return prev;
+      }
+
+      return {
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          holdings: updatedHoldings
+        }
+      };
+    });
+  };
+
+  const updateHolding = (id: string, updates: Partial<HoldingItem>) => {
+    setState(prev => {
+      const currentHoldings = prev.portfolio.holdings || [];
+      const updatedHoldings = currentHoldings.map(h => 
+        h.id === id ? { ...h, ...updates } : h
+      );
+
+      if (prev.portfolio.isHoldingMode) {
+        setTimeout(() => syncHoldingsToState(updatedHoldings, prev.portfolio.cash), 0);
+        return prev;
+      }
+
+      return {
+        ...prev,
+        portfolio: {
+          ...prev.portfolio,
+          holdings: updatedHoldings
+        }
+      };
+    });
+  };
+
+  const refreshAllPrices = async (usdRate: number = 32.2): Promise<boolean> => {
+    // 異步載入 priceFetcher 模組以確保運行安全
+    try {
+      const { fetchLatestPrice } = await import('../utils/priceFetcher');
+      let currentHoldings: HoldingItem[] = [];
+      
+      // 使用函數式更新來確保獲取到最新 state
+      let success = false;
+      setState(prev => {
+        currentHoldings = prev.portfolio.holdings || [];
+        return prev;
+      });
+
+      if (currentHoldings.length === 0) return true;
+
+      const updatedHoldings = [...currentHoldings];
+      let hasAnyUpdate = false;
+
+      for (let i = 0; i < updatedHoldings.length; i++) {
+        const h = updatedHoldings[i];
+        const latestPrice = await fetchLatestPrice(h.symbol);
+        if (latestPrice !== null) {
+          updatedHoldings[i] = {
+            ...h,
+            currentPrice: latestPrice
+          };
+          hasAnyUpdate = true;
+        }
+      }
+
+      if (hasAnyUpdate) {
+        syncHoldingsToState(updatedHoldings, state.portfolio.cash, usdRate);
+        success = true;
+      } else {
+        success = true;
+      }
+      return success;
+    } catch (e) {
+      console.error('Failed to refresh prices', e);
+      return false;
+    }
+  };
+
   const addGranularHistoryPoint = (
     date: string,
     detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
@@ -368,7 +618,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addHistoryPoint,
         resetAll,
         importState,
-        addGranularHistoryPoint
+        addGranularHistoryPoint,
+        toggleHoldingMode,
+        addHolding,
+        deleteHolding,
+        updateHolding,
+        refreshAllPrices
       }}
     >
       {children}

@@ -1,7 +1,7 @@
-import type { Portfolio, AllocationTarget } from '../context/AppContext';
+import type { Portfolio, AllocationTarget, AssetClassKey } from '../context/AppContext';
 
 export interface RebalanceResultItem {
-  assetKey: keyof Omit<Portfolio, 'history'>;
+  assetKey: AssetClassKey;
   displayName: string;
   currentValue: number;
   currentPercent: number;
@@ -11,7 +11,7 @@ export interface RebalanceResultItem {
 }
 
 // 資產與配置目標的映射關係
-export const ASSET_MAP: Record<keyof Omit<Portfolio, 'history'>, { targetKey: keyof AllocationTarget; name: string }> = {
+export const ASSET_MAP: Record<AssetClassKey, { targetKey: keyof AllocationTarget; name: string }> = {
   cash: { targetKey: 'cash', name: '現金 (Cash)' },
   fund: { targetKey: 'bond', name: '基金/債券 (Fund/Bond)' },
   tw_stock: { targetKey: 'tw_stock', name: '台灣股票 (TW Stock)' },
@@ -34,7 +34,7 @@ export const calculateExactRebalance = (
 ): RebalanceResultItem[] => {
   const total = calculateTotalPortfolioValue(portfolio);
   
-  return (Object.keys(ASSET_MAP) as Array<keyof Omit<Portfolio, 'history'>>).map(key => {
+  return (Object.keys(ASSET_MAP) as Array<AssetClassKey>).map(key => {
     const mapping = ASSET_MAP[key];
     const currentValue = portfolio[key];
     const targetPercent = target[mapping.targetKey];
@@ -68,7 +68,7 @@ export const calculateCashOnlyRebalance = (
   const nextTotal = total + newCash;
   
   // 計算在新增資金後，每項資產與理想資產總額的缺口 (Ideal - Current)
-  const shortfalls = (Object.keys(ASSET_MAP) as Array<keyof Omit<Portfolio, 'history'>>).map(key => {
+  const shortfalls = (Object.keys(ASSET_MAP) as Array<AssetClassKey>).map(key => {
     const mapping = ASSET_MAP[key];
     const currentValue = portfolio[key];
     const targetPercent = target[mapping.targetKey];
@@ -86,7 +86,7 @@ export const calculateCashOnlyRebalance = (
 
   const totalPositiveShortfall = shortfalls.reduce((sum, item) => sum + item.shortfall, 0);
 
-  return (Object.keys(ASSET_MAP) as Array<keyof Omit<Portfolio, 'history'>>).map(key => {
+  return (Object.keys(ASSET_MAP) as Array<AssetClassKey>).map(key => {
     const mapping = ASSET_MAP[key];
     const currentValue = portfolio[key];
     const targetPercent = target[mapping.targetKey];
@@ -125,7 +125,7 @@ export const calculateThresholdRebalance = (
 ): RebalanceResultItem[] => {
   const total = calculateTotalPortfolioValue(portfolio);
   
-  return (Object.keys(ASSET_MAP) as Array<keyof Omit<Portfolio, 'history'>>).map(key => {
+  return (Object.keys(ASSET_MAP) as Array<AssetClassKey>).map(key => {
     const mapping = ASSET_MAP[key];
     const currentValue = portfolio[key];
     const targetPercent = target[mapping.targetKey];
