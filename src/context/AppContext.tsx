@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { fetchLatestPrice } from '../utils/priceFetcher';
 
 export type PortfolioHistoryPoint = {
   date: string;      // YYYY-MM-DD
@@ -28,6 +29,7 @@ export type Portfolio = {
   crypto: number;
   holdings?: HoldingItem[];    // [NEW] 持股明細
   isHoldingMode?: boolean;     // [NEW] 是否啟用持股模式
+  usdRate?: number;            // [NEW] 美元匯率
   history: PortfolioHistoryPoint[];
 };
 
@@ -74,6 +76,7 @@ export interface AppContextProps {
   deleteHolding: (id: string) => void;
   updateHolding: (id: string, updates: Partial<HoldingItem>) => void;
   refreshAllPrices: (usdRate?: number) => Promise<boolean>;
+  updateUsdRate: (rate: number) => void; // [NEW] 更新匯率
 }
 
 const LOCAL_STORAGE_KEY = 'aiPortfolio';
@@ -91,6 +94,7 @@ const DEFAULT_STATE: AiPortfolioState = {
       { id: '3', symbol: 'BTC-USD', name: '比特幣', shares: 0.0139, currentPrice: 67000, currency: 'USD', assetType: 'crypto' }
     ],
     isHoldingMode: false,
+    usdRate: 32.2,
     history: [
       { date: '2025-11-22', net_worth: 800000, cash: 150000, fund: 100000, tw_stock: 250000, us_stock: 280000, crypto: 20000 },
       { date: '2025-12-22', net_worth: 850000, cash: 160000, fund: 110000, tw_stock: 270000, us_stock: 290000, crypto: 20000 },
@@ -184,6 +188,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ...portfolio,
             holdings: portfolio.holdings || [],
             isHoldingMode: portfolio.isHoldingMode || false,
+            usdRate: portfolio.usdRate !== undefined ? portfolio.usdRate : DEFAULT_STATE.portfolio.usdRate,
             history: migratedHistory
           },
           allocation_target: {
@@ -348,12 +353,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (enabled) {
         const holdingsList = updatedPortfolio.holdings || [];
+        const rate = updatedPortfolio.usdRate ?? 32.2;
         
         const sumByType = (type: HoldingItem['assetType']) => {
           return holdingsList
             .filter(h => h.assetType === type)
             .reduce((sum, h) => {
-              const priceTwd = h.currency === 'USD' ? h.currentPrice * 32.2 : h.currentPrice;
+              const priceTwd = h.currency === 'USD' ? h.currentPrice * rate : h.currentPrice;
               return sum + Math.round(h.shares * priceTwd);
             }, 0);
         };
@@ -399,14 +405,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncHoldingsToState = (
     holdingsList: HoldingItem[], 
     cashVal: number, 
-    usdRate: number = 32.2
+    usdRate?: number
   ) => {
     setState(prev => {
+      const rate = usdRate !== undefined ? usdRate : (prev.portfolio.usdRate ?? 32.2);
       const sumByType = (type: HoldingItem['assetType']) => {
         return holdingsList
           .filter(h => h.assetType === type)
           .reduce((sum, h) => {
-            const priceTwd = h.currency === 'USD' ? h.currentPrice * usdRate : h.currentPrice;
+            const priceTwd = h.currency === 'USD' ? h.currentPrice * rate : h.currentPrice;
             return sum + Math.round(h.shares * priceTwd);
           }, 0);
       };
@@ -517,16 +524,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const refreshAllPrices = async (usdRate: number = 32.2): Promise<boolean> => {
-    // 異步載入 priceFetcher 模組以確保運行安全
+  const refreshAllPrices = async (usdRate?: number): Promise<boolean> => {
     try {
-      const { fetchLatestPrice } = await import('../utils/priceFetcher');
       let currentHoldings: HoldingItem[] = [];
+      let currentCash = 200000;
+      let currentRate = 32.2;
       
-      // 使用函數式更新來確保獲取到最新 state
-      let success = false;
       setState(prev => {
         currentHoldings = prev.portfolio.holdings || [];
+        currentCash = prev.portfolio.cash;
+        currentRate = prev.portfolio.usdRate ?? 32.2;
         return prev;
       });
 
@@ -548,17 +555,99 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (hasAnyUpdate) {
-        syncHoldingsToState(updatedHoldings, state.portfolio.cash, usdRate);
-        success = true;
-      } else {
-        success = true;
+        const rateToUse = usdRate !== undefined ? usdRate : currentRate;
+        syncHoldingsToState(updatedHoldings, currentCash, rateToUse);
       }
-      return success;
+      return true;
     } catch (e) {
       console.error('Failed to refresh prices', e);
       return false;
     }
   };
+
+  // [NEW] 更新全域匯率並進行持股重估
+  const updateUsdRate = (rate: number) => {
+    if (rate <= 20 || rate >= 50 || isNaN(rate)) {
+      console.warn(`[FX Update] Ignored abnormal rate: ${rate}`);
+      return;
+    }
+
+    setState(prev => {
+      const updatedPortfolio = {
+        ...prev.portfolio,
+        usdRate: rate
+      };
+
+      if (prev.portfolio.isHoldingMode) {
+        const holdingsList = updatedPortfolio.holdings || [];
+        const sumByType = (type: HoldingItem['assetType']) => {
+          return holdingsList
+            .filter(h => h.assetType === type)
+            .reduce((sum, h) => {
+              const priceTwd = h.currency === 'USD' ? h.currentPrice * rate : h.currentPrice;
+              return sum + Math.round(h.shares * priceTwd);
+            }, 0);
+        };
+
+        updatedPortfolio.tw_stock = sumByType('tw_stock');
+        updatedPortfolio.us_stock = sumByType('us_stock');
+        updatedPortfolio.fund = sumByType('fund');
+        updatedPortfolio.crypto = sumByType('crypto');
+
+        const netWorthSum = 
+          updatedPortfolio.cash + 
+          updatedPortfolio.fund + 
+          updatedPortfolio.tw_stock + 
+          updatedPortfolio.us_stock + 
+          updatedPortfolio.crypto;
+
+        const newHistory = [...updatedPortfolio.history];
+        const newPoint = {
+          date: newHistory.length > 0 ? newHistory[newHistory.length - 1].date : new Date().toISOString().split('T')[0],
+          net_worth: netWorthSum,
+          cash: updatedPortfolio.cash,
+          fund: updatedPortfolio.fund,
+          tw_stock: updatedPortfolio.tw_stock,
+          us_stock: updatedPortfolio.us_stock,
+          crypto: updatedPortfolio.crypto
+        };
+
+        if (newHistory.length > 0) {
+          newHistory[newHistory.length - 1] = newPoint;
+        } else {
+          newHistory.push(newPoint);
+        }
+        updatedPortfolio.history = newHistory;
+      }
+
+      return {
+        ...prev,
+        portfolio: updatedPortfolio
+      };
+    });
+  };
+
+  // [NEW] 登入初始化時自動抓取最新匯率 (Auto FX Fetcher)
+  useEffect(() => {
+    const fetchFxRate = async () => {
+      try {
+        console.log('[FX Auto Fetch] Starting auto USD rate fetch...');
+        const rate = await fetchLatestPrice('USDTWD=X');
+        if (rate !== null && rate > 20 && rate < 50) {
+          console.log(`[FX Auto Fetch] Successfully loaded USD rate from Yahoo Finance: ${rate}`);
+          updateUsdRate(rate);
+        } else {
+          console.warn(`[FX Auto Fetch] API returned invalid or no rate: ${rate}. Using fallback.`);
+        }
+      } catch (err) {
+        console.error('[FX Auto Fetch] Error during FX rate fetch:', err);
+      }
+    };
+
+    // 延遲 1 秒執行以防止阻塞首屏渲染，確保極致的高級感體驗
+    const timer = setTimeout(fetchFxRate, 1000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const addGranularHistoryPoint = (
     date: string,
@@ -638,7 +727,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addHolding,
         deleteHolding,
         updateHolding,
-        refreshAllPrices
+        refreshAllPrices,
+        updateUsdRate
       }}
     >
       {children}

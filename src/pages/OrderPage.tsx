@@ -11,7 +11,7 @@ interface AssetOrderConfig {
 }
 
 export const OrderPage: React.FC = () => {
-  const { state } = useApp();
+  const { state, updateUsdRate } = useApp();
   const { portfolio, allocation_target } = state;
 
   // 1. 設定各資產大類的代表標的與目前市價
@@ -23,8 +23,8 @@ export const OrderPage: React.FC = () => {
     cash: { symbol: '台幣現金存款', price: 1, currency: 'TWD' }
   });
 
-  // 美金匯率微調
-  const [usdFxRate, setUsdFxRate] = useState<number>(32.2);
+  // 美金匯率微調 (已全域化)
+  const usdFxRate = portfolio.usdRate ?? 32.2;
 
   // 2. 獲取精準再平衡的交易建議金額 (以 TWD 為單位)
   const exactRebalanceData = useMemo(() => {
@@ -133,7 +133,7 @@ export const OrderPage: React.FC = () => {
             <input
               type="number"
               value={usdFxRate}
-              onChange={(e) => setUsdFxRate(parseFloat(e.target.value) || 32)}
+              onChange={(e) => updateUsdRate(parseFloat(e.target.value) || 32)}
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
               step="0.05"
             />

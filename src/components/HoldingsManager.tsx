@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 export const HoldingsManager: React.FC = () => {
-  const { state, toggleHoldingMode, addHolding, deleteHolding, updateHolding, refreshAllPrices } = useApp();
+  const { state, toggleHoldingMode, addHolding, deleteHolding, updateHolding, refreshAllPrices, updateUsdRate } = useApp();
   const { portfolio } = state;
   const holdings = portfolio.holdings || [];
   const isHoldingMode = portfolio.isHoldingMode || false;
@@ -32,8 +32,8 @@ export const HoldingsManager: React.FC = () => {
   const [assetType, setAssetType] = useState<HoldingItem['assetType']>('tw_stock');
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // 美金對台幣最新匯率 (前端輔助計算)
-  const [usdRate, setUsdRate] = useState<number>(32.2);
+  // 美金對台幣最新匯率 (前端輔助計算，已全域化)
+  const usdRate = portfolio.usdRate ?? 32.2;
 
   // 開啟新增表單
   const handleOpenAdd = () => {
@@ -166,7 +166,7 @@ export const HoldingsManager: React.FC = () => {
                 <input
                   type="number"
                   value={usdRate}
-                  onChange={(e) => setUsdRate(parseFloat(e.target.value) || 32)}
+                  onChange={(e) => updateUsdRate(parseFloat(e.target.value) || 32)}
                   className="w-12 bg-transparent text-center border-b border-slate-300 focus:outline-none text-indigo-600 font-black"
                   step="0.1"
                 />
