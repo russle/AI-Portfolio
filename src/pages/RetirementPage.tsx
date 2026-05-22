@@ -4,7 +4,7 @@ import { Card } from '../components/Card';
 import { Gauge } from '../components/Gauge';
 import { LineChart } from '../components/LineChart';
 import { AlertBanner } from '../components/AlertBanner';
-import { runMonteCarloSimulation as runMonteCarlo, assessRetirementFeasibility as assessFeasibility } from '../utils/retirement';
+import { runMonteCarloSimulation as runMonteCarlo, assessRetirementFeasibility as assessFeasibility, runFullLifeMonteCarloSimulation } from '../utils/retirement';
 
 export const RetirementPage: React.FC = () => {
   const { state, updateRetirementConfig } = useApp();
@@ -62,39 +62,43 @@ export const RetirementPage: React.FC = () => {
     }
   }, [withdrawalRule]);
 
-  // 執行蒙地卡羅模擬
-  // 我們可以使用隨機模擬來計算退休前資產積累，並且在折線圖上渲染
-  const monteCarloResult = useMemo(() => {
-    // 預設標準差 15%
-    return runMonteCarlo(
+  // 執行全生命週期（累積期 + 提領消耗期）的蒙地卡羅隨機模擬
+  const fullLifeResult = useMemo(() => {
+    const strategy = withdrawalRule === 'four_percent' ? 'four_percent' :
+                     withdrawalRule === 'gk_dynamic' ? 'gk_dynamic' : 'die_to_zero';
+                     
+    return runFullLifeMonteCarloSimulation(
       currentAsset,
       retirement.monthly_invest,
-      simulationYears,
+      retirement.age,
+      targetRetirementAge,
       retirement.expected_return,
       0.15, // std
       retirement.inflation,
-      fireTarget
+      retirement.monthly_spending,
+      strategy,
+      85 // maxAge 預設為 85 歲
     );
-  }, [currentAsset, retirement.monthly_invest, simulationYears, retirement.expected_return, retirement.inflation, fireTarget]);
+  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule]);
 
-  // 將蒙地卡羅結果轉換成 Recharts 格式
+  // 將全生命週期蒙地卡羅結果轉換成 Recharts 格式
   const chartData = useMemo(() => {
     const data = [];
-    const yearsArray = monteCarloResult.yearsArray;
-    const p5 = monteCarloResult.p5;
-    const p50 = monteCarloResult.p50;
-    const p95 = monteCarloResult.p95;
+    const yearsArray = fullLifeResult.yearsArray;
+    const p5 = fullLifeResult.p5;
+    const p50 = fullLifeResult.p50;
+    const p95 = fullLifeResult.p95;
 
     for (let i = 0; i < yearsArray.length; i++) {
       data.push({
-        year: `第 ${yearsArray[i]} 年`,
+        year: `${yearsArray[i]} 歲`,
         p5: p5[i],
         p50: p50[i],
         p95: p95[i],
       });
     }
     return data;
-  }, [monteCarloResult]);
+  }, [fullLifeResult]);
 
   // 退休可行性評估
   const feasibilityAges = useMemo(() => {
@@ -108,6 +112,20 @@ export const RetirementPage: React.FC = () => {
       fireTarget
     );
   }, [currentAsset, retirement.monthly_invest, retirement.age, retirement.expected_return, retirement.inflation, fireTarget]);
+
+  // 計算退休點（目標退休年齡）之積累成功率
+  const retireSuccessRate = useMemo(() => {
+    const res = runMonteCarlo(
+      currentAsset,
+      retirement.monthly_invest,
+      simulationYears,
+      retirement.expected_return,
+      0.15,
+      retirement.inflation,
+      fireTarget
+    );
+    return res.successRate;
+  }, [currentAsset, retirement.monthly_invest, simulationYears, retirement.expected_return, retirement.inflation, fireTarget]);
 
   const linesConfig = [
     { key: 'p95', name: '樂觀上限 (P95)', stroke: '#10b981' },
@@ -282,13 +300,90 @@ export const RetirementPage: React.FC = () => {
         {/* 右側：蒙地卡羅成功率儀表板 */}
         <Card className="p-6 lg:col-span-1 flex flex-col items-center justify-center">
           <Gauge 
-            value={monteCarloResult.successRate} 
+            value={retireSuccessRate} 
             title={`${targetRetirementAge} 歲退休成功機率`} 
           />
           <div className="text-center mt-2 max-w-xs">
             <p className="text-xs text-slate-400 leading-relaxed">
-              在 {simulationYears} 年的累積期中，經過 1000 次隨機複利演算，有 <span className="font-bold text-slate-600">{(monteCarloResult.successRate * 100).toFixed(0)}%</span> 的軌跡最終累積資產超越了目標金額。
+              在 {simulationYears} 年的累積期中，經過 1000 次隨機複利演算，有 <span className="font-bold text-slate-600">{(retireSuccessRate * 100).toFixed(0)}%</span> 的軌跡最終累積資產超越了目標金額。
             </p>
+          </div>
+        </Card>
+      </div>
+
+      {/* 退休後資產壽命與歸零預估面板 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* P5 */}
+        <Card className="p-5 border-l-4 border-l-rose-500 bg-rose-50/10 flex flex-col justify-between space-y-2">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🔴 保守極端情況 (P5 軌跡)</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-slate-700">
+                {fullLifeResult.depletionAgeP5 
+                  ? `${fullLifeResult.depletionAgeP5} 歲花光` 
+                  : '🛡️ 85歲前安全無虞'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed mt-2">
+              {fullLifeResult.depletionAgeP5 
+                ? `在市場極度低迷情況下，資產預計於退休後 ${fullLifeResult.depletionAgeP5 - targetRetirementAge} 年內耗盡。` 
+                : '即使在極端低迷行情下，資產也能安全支撐至 85 歲以上不枯竭。'}
+            </p>
+          </div>
+          {fullLifeResult.depletionAgeP5 && (
+            <div className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
+              ⚠️ 長壽風險極高，建議追加儲蓄
+            </div>
+          )}
+        </Card>
+
+        {/* P50 */}
+        <Card className="p-5 border-l-4 border-l-blue-500 bg-blue-50/10 flex flex-col justify-between space-y-2">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🔵 中位期望情況 (P50 軌跡)</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-slate-700">
+                {fullLifeResult.depletionAgeP50 
+                  ? `${fullLifeResult.depletionAgeP50} 歲花光` 
+                  : '🛡️ 85歲前安全無虞'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed mt-2">
+              {fullLifeResult.depletionAgeP50 
+                ? `符合平均市場表現下，資產預計於退休後 ${fullLifeResult.depletionAgeP50 - targetRetirementAge} 年內花光。` 
+                : '平均市場表現下，資產非常安全，完全不會枯竭。'}
+            </p>
+          </div>
+          {fullLifeResult.depletionAgeP50 ? (
+            <div className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
+              💡 可延後 3~5 年退休以求資產永續
+            </div>
+          ) : (
+            <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
+              🎉 期望表現下達到財務自由
+            </div>
+          )}
+        </Card>
+
+        {/* P95 */}
+        <Card className="p-5 border-l-4 border-l-emerald-500 bg-emerald-50/10 flex flex-col justify-between space-y-2">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🟢 樂觀上游情況 (P95 軌跡)</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-black text-slate-700">
+                {fullLifeResult.depletionAgeP95 
+                  ? `${fullLifeResult.depletionAgeP95} 歲花光` 
+                  : '🛡️ 85歲前安全無虞'}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed mt-2">
+              {fullLifeResult.depletionAgeP95 
+                ? `在市場繁榮的大牛市行情下，資產仍將於 ${fullLifeResult.depletionAgeP95} 歲花光。` 
+                : '大牛市行情下，資產將呈爆發性增值，至 85 歲仍留有龐大餘額。'}
+            </p>
+          </div>
+          <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
+            {fullLifeResult.depletionAgeP95 ? '📈 可享有更優渥的生活品質' : '💎 傳承子孫的資產非常豐厚'}
           </div>
         </Card>
       </div>
