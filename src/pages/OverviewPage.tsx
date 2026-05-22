@@ -20,7 +20,8 @@ import {
   Upload,
   Database,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  CalendarPlus
 } from 'lucide-react';
 
 // 還原資料的欄位合法性校驗
@@ -59,13 +60,72 @@ const validateImportedState = (data: any): boolean => {
 };
 
 export const OverviewPage: React.FC = () => {
-  const { state, importState } = useApp();
+  const { state, importState, addGranularHistoryPoint } = useApp();
   const navigate = useNavigate();
   const { portfolio, allocation_target, retirement } = state;
 
   const [chartView, setChartView] = useState<'line' | 'stacked'>('line');
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 補記快照相關 State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalDate, setModalDate] = useState('');
+  const [modalCash, setModalCash] = useState(0);
+  const [modalFund, setModalFund] = useState(0);
+  const [modalTwStock, setModalTwStock] = useState(0);
+  const [modalUsStock, setModalUsStock] = useState(0);
+  const [modalCrypto, setModalCrypto] = useState(0);
+  const [modalMsg, setModalMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // 開啟 Modal 並智慧預填
+  const openSnapshotModal = () => {
+    const history = portfolio.history;
+    const latestPoint = history.length > 0 ? history[history.length - 1] : null;
+
+    setModalDate(new Date().toISOString().split('T')[0]);
+    setModalCash(latestPoint?.cash ?? portfolio.cash ?? 0);
+    setModalFund(latestPoint?.fund ?? portfolio.fund ?? 0);
+    setModalTwStock(latestPoint?.tw_stock ?? portfolio.tw_stock ?? 0);
+    setModalUsStock(latestPoint?.us_stock ?? portfolio.us_stock ?? 0);
+    setModalCrypto(latestPoint?.crypto ?? portfolio.crypto ?? 0);
+    setModalMsg(null);
+    setIsModalOpen(true);
+  };
+
+  // 提交補記快照
+  const handleModalSubmit = () => {
+    if (!modalDate) {
+      setModalMsg({ type: 'error', text: '❌ 請選擇正確的日期' });
+      return;
+    }
+
+    if (modalCash < 0 || modalFund < 0 || modalTwStock < 0 || modalUsStock < 0 || modalCrypto < 0) {
+      setModalMsg({ type: 'error', text: '❌ 資產金額不能為負數' });
+      return;
+    }
+
+    // 檢查日期重疊
+    const isDuplicate = portfolio.history.some(p => p.date === modalDate);
+    if (isDuplicate) {
+      const confirmOverwrite = window.confirm(`⚠️ 日期 [${modalDate}] 已存在歷史快照記錄。是否確定要覆寫該日期的細分資產數據？`);
+      if (!confirmOverwrite) return;
+    }
+
+    // 呼叫 Context 方法
+    addGranularHistoryPoint(modalDate, {
+      cash: Math.round(modalCash),
+      fund: Math.round(modalFund),
+      tw_stock: Math.round(modalTwStock),
+      us_stock: Math.round(modalUsStock),
+      crypto: Math.round(modalCrypto)
+    });
+
+    // 成功通知
+    setBackupMsg({ type: 'success', text: `🎉 歷史快照 [${modalDate}] 登錄成功！` });
+    setIsModalOpen(false);
+    setTimeout(() => setBackupMsg(null), 4000);
+  };
 
   // 1. 淨資產計算
   const totalNetWorth = useMemo(() => {
@@ -276,6 +336,15 @@ export const OverviewPage: React.FC = () => {
               </div>
               
               <div className="flex items-center gap-3">
+                {/* 📝 補記歷史快照按鈕 */}
+                <button
+                  onClick={openSnapshotModal}
+                  className="flex items-center gap-1.5 py-1.5 px-3 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-xl text-[10px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                >
+                  <CalendarPlus className="w-3.5 h-3.5" />
+                  補記快照
+                </button>
+
                 {/* 雙視角 Segmented Control */}
                 <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 text-[10px] font-bold select-none">
                   <button
@@ -491,6 +560,123 @@ export const OverviewPage: React.FC = () => {
           開啟「即時下單股數計算輔助器」
         </button>
       </div>
+
+      {/* 補記歷史快照 Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white/85 backdrop-blur-md border border-slate-200/80 shadow-2xl rounded-2xl max-w-md w-full overflow-hidden p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 select-none">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 bg-blue-50 text-blue-600 rounded-lg">
+                  <CalendarPlus className="w-4 h-4" />
+                </span>
+                <h3 className="text-sm font-black text-slate-800">📝 補記歷史快照</h3>
+              </div>
+              <button 
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-lg font-bold cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {modalMsg && (
+              <div className="mb-4 p-2.5 bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold rounded-xl flex items-center gap-2">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{modalMsg.text}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {/* 日期欄位 */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">選擇快照日期</label>
+                <input
+                  type="date"
+                  value={modalDate}
+                  onChange={(e) => setModalDate(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                />
+              </div>
+
+              {/* 資產明細欄位 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">💵 現金 (TWD)</label>
+                  <input
+                    type="number"
+                    value={modalCash || ''}
+                    onChange={(e) => setModalCash(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">📈 基金/債券 (TWD)</label>
+                  <input
+                    type="number"
+                    value={modalFund || ''}
+                    onChange={(e) => setModalFund(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">🇹🇼 台灣股票 (TWD)</label>
+                  <input
+                    type="number"
+                    value={modalTwStock || ''}
+                    onChange={(e) => setModalTwStock(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">🇺🇸 美國股票 (TWD)</label>
+                  <input
+                    type="number"
+                    value={modalUsStock || ''}
+                    onChange={(e) => setModalUsStock(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">🪙 加密貨幣 (TWD)</label>
+                  <input
+                    type="number"
+                    value={modalCrypto || ''}
+                    onChange={(e) => setModalCrypto(Number(e.target.value))}
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* 智慧預填與防禦說明 */}
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-150 text-[10px] text-slate-500 leading-relaxed space-y-1">
+                <p className="font-bold text-slate-600">💡 系統智慧快照邏輯：</p>
+                <ul className="list-disc pl-3.5 space-y-0.5 font-semibold">
+                  <li>智慧預填：自動套用上一期歷史快照做為預填底稿。</li>
+                  <li>最新同步：補記今天或新日期，會同步更新當前實際資產。</li>
+                  <li>漏帳不污染：補記過去歷史漏帳時，僅寫入 history，不污染當前資產現值。</li>
+                </ul>
+              </div>
+
+              {/* 按鈕操作區 */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer transition-all"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleModalSubmit}
+                  className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black cursor-pointer transition-all shadow-sm"
+                >
+                  確認儲存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

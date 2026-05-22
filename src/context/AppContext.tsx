@@ -49,6 +49,10 @@ export interface AppContextProps {
   addHistoryPoint: (date: string, netWorth: number) => void;
   resetAll: () => void;
   importState: (newState: AiPortfolioState) => void;
+  addGranularHistoryPoint: (
+    date: string,
+    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
+  ) => void;
 }
 
 const LOCAL_STORAGE_KEY = 'aiPortfolio';
@@ -305,6 +309,55 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(newState));
   };
 
+  const addGranularHistoryPoint = (
+    date: string,
+    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
+  ) => {
+    setState(prev => {
+      const updatedHistory = [...prev.portfolio.history];
+      const existIndex = updatedHistory.findIndex(p => p.date === date);
+      
+      const netWorthSum = detail.cash + detail.fund + detail.tw_stock + detail.us_stock + detail.crypto;
+      
+      const newPoint: PortfolioHistoryPoint = {
+        date,
+        net_worth: netWorthSum,
+        ...detail
+      };
+
+      if (existIndex >= 0) {
+        updatedHistory[existIndex] = newPoint;
+      } else {
+        updatedHistory.push(newPoint);
+        updatedHistory.sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      // 日期決定論：比對是不是最新或更晚的日期
+      const latestDateInHistory = updatedHistory.length > 0 ? updatedHistory[updatedHistory.length - 1].date : date;
+      const isLatestOrNewer = date >= latestDateInHistory;
+
+      const updatedPortfolio = isLatestOrNewer
+        ? {
+            ...prev.portfolio,
+            cash: detail.cash,
+            fund: detail.fund,
+            tw_stock: detail.tw_stock,
+            us_stock: detail.us_stock,
+            crypto: detail.crypto,
+            history: updatedHistory
+          }
+        : {
+            ...prev.portfolio,
+            history: updatedHistory
+          };
+
+      return {
+        ...prev,
+        portfolio: updatedPortfolio
+      };
+    });
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -314,7 +367,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updateRetirementConfig,
         addHistoryPoint,
         resetAll,
-        importState
+        importState,
+        addGranularHistoryPoint
       }}
     >
       {children}
