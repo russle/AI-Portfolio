@@ -258,3 +258,37 @@ export function calculateRebalancing(
   };
 }
 
+/**
+ * 根據退休累積資產，逆推在 Die to Zero (85歲歸零) 目標下，退休後每年/每月可提領花費金額 (實質購買力)
+ * ExpenseAnnual = AssetRetire * rReal / [1 - (1 + rReal)^(-years)]
+ * 
+ * @param assetAtRetire 退休時預估累積資產 (新台幣)
+ * @param rReal 實質複利報酬率 (小數，例如 0.041)
+ * @param years 提領年限 (年，例如 85 - 退休年齡)
+ */
+export function calculateSpendingForDieToZero(
+  assetAtRetire: number,
+  rReal: number,
+  years: number
+): { annual: number; monthly: number } {
+  if (assetAtRetire <= 0 || years <= 0) {
+    return { annual: 0, monthly: 0 };
+  }
+
+  // 防禦性處理：若實質報酬率接近 0
+  if (Math.abs(rReal) < 0.0001) {
+    const annual = assetAtRetire / years;
+    return {
+      annual,
+      monthly: annual / 12
+    };
+  }
+
+  const annual = assetAtRetire * (rReal / (1 - Math.pow(1 + rReal, -years)));
+  return {
+    annual,
+    monthly: annual / 12
+  };
+}
+
+

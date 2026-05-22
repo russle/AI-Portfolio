@@ -5,6 +5,7 @@ import { Gauge } from '../components/Gauge';
 import { LineChart } from '../components/LineChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { runMonteCarloSimulation as runMonteCarlo, assessRetirementFeasibility as assessFeasibility, runFullLifeMonteCarloSimulation } from '../utils/retirement';
+import { calculateSpendingForDieToZero } from '../utils/formulas';
 
 export const RetirementPage: React.FC = () => {
   const { state, updateRetirementConfig } = useApp();
@@ -126,6 +127,29 @@ export const RetirementPage: React.FC = () => {
     );
     return res.successRate;
   }, [currentAsset, retirement.monthly_invest, simulationYears, retirement.expected_return, retirement.inflation, fireTarget]);
+
+  // 當提領法則為 Die to Zero 時，動態計算退休後每月可支配金額
+  const dieToZeroResult = useMemo(() => {
+    // 找出 targetRetirementAge 在 fullLifeResult 中的 index
+    const retireAgeIndex = fullLifeResult.yearsArray.indexOf(targetRetirementAge);
+    const expectedAssetAtRetire = retireAgeIndex !== -1 ? fullLifeResult.p50[retireAgeIndex] : 0;
+    
+    const remainingYears = Math.max(1, 85 - targetRetirementAge);
+    const rReal = Math.max(0.01, retirement.expected_return - retirement.inflation);
+    
+    const { annual, monthly } = calculateSpendingForDieToZero(expectedAssetAtRetire, rReal, remainingYears);
+    const diffAmount = monthly - retirement.monthly_spending;
+    const diffPercent = retirement.monthly_spending > 0 ? (diffAmount / retirement.monthly_spending) * 100 : 0;
+    
+    return {
+      expectedAssetAtRetire,
+      monthlySpending: monthly,
+      annualSpending: annual,
+      diffAmount,
+      diffPercent,
+      remainingYears
+    };
+  }, [fullLifeResult, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending]);
 
   const linesConfig = [
     { key: 'p95', name: '樂觀上限 (P95)', stroke: '#10b981' },
@@ -310,6 +334,43 @@ export const RetirementPage: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Die to Zero 每月可花額度提示卡片 */}
+      {withdrawalRule === 'die_to_zero' && (
+        <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 backdrop-blur-md p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 animate-fade-in">
+          {/* 左側資訊 */}
+          <div className="space-y-2 flex-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-blue-700 bg-blue-100/60 border border-blue-200/50 uppercase tracking-wider">
+              ☠️ Die to Zero 財富自由提領指南
+            </div>
+            <h4 className="text-lg font-black text-slate-800 tracking-tight">
+              在 {targetRetirementAge} 歲退休時，您預估可擁有中位數資產 <span className="text-blue-600 font-extrabold">${Math.round(dieToZeroResult.expectedAssetAtRetire).toLocaleString()}</span> 元。
+            </h4>
+            <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
+              依據您的設定，退休後實質複利報酬率為 <span className="font-bold text-slate-700">{((retirement.expected_return - retirement.inflation) * 100).toFixed(1)}%</span>。以 85 歲（剩餘 {dieToZeroResult.remainingYears} 年）財產歸零為目標進行年金均攤，退休後您的每月安全花費額度為：
+            </p>
+          </div>
+
+          {/* 右側大字金額 */}
+          <div className="flex flex-col items-center md:items-end justify-center p-4 bg-white/60 rounded-xl border border-white/80 shadow-inner min-w-[240px]">
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider">實質購買力 / 每月可花費</span>
+            <span className="text-3xl font-black text-blue-600 my-1 font-mono tracking-tight">
+              ${Math.round(dieToZeroResult.monthlySpending).toLocaleString()} <span className="text-xs text-slate-400 font-sans font-medium">元</span>
+            </span>
+            <div className="text-center md:text-right mt-1">
+              {dieToZeroResult.diffAmount >= 0 ? (
+                <span className="inline-flex items-center text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+                  比預設支出多 ${Math.round(dieToZeroResult.diffAmount).toLocaleString()} 元 (+{dieToZeroResult.diffPercent.toFixed(1)}%) ✨
+                </span>
+              ) : (
+                <span className="inline-flex items-center text-[10px] font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">
+                  比預設支出少 ${Math.round(Math.abs(dieToZeroResult.diffAmount)).toLocaleString()} 元 ({Math.abs(dieToZeroResult.diffPercent).toFixed(1)}%) ⚠️
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 退休後資產壽命與歸零預估面板 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
