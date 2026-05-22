@@ -7,6 +7,7 @@ import { RebalancePage } from './pages/RebalancePage';
 import { RetirementPage } from './pages/RetirementPage';
 import { OrderPage } from './pages/OrderPage';
 import { ScenarioPage } from './pages/ScenarioPage';
+import { BacktestPage } from './pages/BacktestPage';
 import { 
   PieChart, 
   Database, 
@@ -18,7 +19,8 @@ import {
   Compass, 
   Menu, 
   X,
-  DollarSign
+  DollarSign,
+  History
 } from 'lucide-react';
 
 // 全站 Navbar 導航與狀態燈元件
@@ -55,6 +57,7 @@ const Navbar: React.FC = () => {
     { to: '/rebalance', label: '配置平衡', icon: <Scale className="w-4 h-4" /> },
     { to: '/retirement', label: '退休規劃', icon: <TrendingUp className="w-4 h-4" /> },
     { to: '/order', label: '下單股數', icon: <DollarSign className="w-4 h-4" /> },
+    { to: '/backtest', label: '歷史回測', icon: <History className="w-4 h-4" /> },
     { to: '/scenario', label: '壓力測試', icon: <ShieldAlert className="w-4 h-4" /> },
   ];
 
@@ -189,6 +192,7 @@ export const AppContent: React.FC = () => {
           <Route path="/retirement" element={<RetirementPage />} />
           <Route path="/order" element={<OrderPage />} />
           <Route path="/scenario" element={<ScenarioPage />} />
+          <Route path="/backtest" element={<BacktestPage />} />
         </Routes>
       </main>
 
