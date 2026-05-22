@@ -134,11 +134,38 @@ $$r_{real} = \max(0.01, r - \text{inflation})$$
 * **財產歸零提領 (Die to Zero)**：採用年金現值逆推公式（退休存活年期為 $N_{surv}$）：
   $$Target = (\text{月生活費} \times 12) \times \frac{1 - (1 + r_{real})^{-N_{surv}}}{r_{real}}$$
 
-#### 3. Monte Carlo 隨機軌跡模擬
-模擬退休資產在未來 $n$ 年的隨機消長。系統採用 **幾何布朗運動 (Geometric Brownian Motion)**，在每一年迭代中生成隨機增長軌跡。設定資產年化報酬率為 $r$，波動率（標準差）固定設為 $\sigma = 0.15$：
-$$V_{t} = (V_{t-1} + PMT) \times \exp\left( \left(r - \frac{\sigma^2}{2}\right) \times 1 + \sigma \times Z \right)$$
-其中 $Z \sim N(0,1)$ 為標準常態分佈之隨機變數。
-* **成功率定義**：重複進行 $1,000$ 次獨立軌跡模擬，計算在退休年齡點其實際累積資產 $V_n \ge Target$ 的模擬次數佔比，得出最終「退休成功率 %」。
+#### 3. 全生命週期蒙地卡羅雙軌迭代模擬 (Full-Life Simulation)
+系統透過模擬 1,000 次隨機市場報酬率，繪製出當前年齡至 $85$ 歲的完整資產軌跡。設定資產預期報酬率為 $r$，波動率（標準差）為 $\sigma = 0.15$，每年隨機報酬率為 $R_t \sim N(r, \sigma)$，年通膨率為 $\text{inflation}$。
+
+對於每一條隨機軌跡，設第 $t$ 年的年齡為 $A_t = \text{current\_age} + t$（其中 $t \in [1, 85 - \text{current\_age}]$）：
+
+##### A. 退休前累積期 ($A_t \le \text{retire\_age}$)
+此階段資產穩步積累，每年年底滾存報酬率並持續注入儲蓄：
+$$V_t = \frac{V_{t-1} \times (1 + R_t) + W_{invest}}{1 + \text{inflation}}$$
+其中 $W_{invest} = \text{monthly\_invest} \times 12$。由於除以 $(1 + \text{inflation})$，系統中所有資產數值均以**「實質購買力（Constant TWD）」**計價。
+
+##### B. 退休後消耗期 ($A_t > \text{retire\_age}$)
+此階段停止儲蓄，改為按提領策略扣除生活費 $W_{withdraw, t}$，並滾存餘額：
+$$V_t = \max\left(0, \frac{(V_{t-1} - W_{withdraw, t}) \times (1 + R_t)}{1 + \text{inflation}}\right)$$
+
+其中，不同提領策略的提領金額 $W_{withdraw, t}$ 計算如下：
+* **4% 提領法則**：每年固定扣除定額實質生活費：
+  $$W_{withdraw, t} = \text{monthly\_spending} \times 12$$
+* **蓋頓-克林格 (GK) 動態法則**：根據前一年底資產餘額 $V_{t-1}$ 與目標資產 $V_{target} = (\text{monthly\_spending} \times 12) / 0.05$ 進行防禦性調整：
+  $$W_{withdraw, t} = \begin{cases} 
+  (\text{monthly\_spending} \times 12) \times 1.1, & \text{if } V_{t-1} \ge V_{target} \times 1.2 \\
+  (\text{monthly\_spending} \times 12) \times 0.9, & \text{if } V_{t-1} \le V_{target} \times 0.8 \\
+  \text{monthly\_spending} \times 12, & \text{otherwise}
+  \end{cases}$$
+* **Die to Zero 年金均攤法則**：依據剩餘壽命年期 $N_{remain} = 85 - A_t + 1$ 動態均攤餘額：
+  $$W_{withdraw, t} = \frac{V_{t-1}}{\text{AnnuityFactor}_t}$$
+  $$\text{AnnuityFactor}_t = \frac{1 - (1 + r_{real})^{-N_{remain}}}{r_{real}}$$
+
+#### 4. P5/P50/P95 智慧資產花光歲數預估
+模擬結束後，將 1,000 次模擬結果排序，抽取得出 P5（保守極端）、P50（期望中位）、P95（樂觀上限）三條代表性分位軌跡。
+對於任一分位數軌跡 $V_{P, t}$（其中 $P \in \{5, 50, 95\}$），其「資產花光歲數」 $\text{depletionAge}_P$ 定義為：
+$$\text{depletionAge}_P = \min \{ A_t \mid A_t \ge \text{retire\_age} \text{ and } V_{P, t} \le 0 \}$$
+若在所有模擬年期 $t \in [0, 85 - \text{current\_age}]$ 內皆滿足 $V_{P, t} > 0$，則花光歲數記為 $\text{null}$，於 UI 面板上呈現「🛡️ 85歲前安全無虞」。
 
 ---
 
