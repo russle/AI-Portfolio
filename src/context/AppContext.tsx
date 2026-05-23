@@ -49,6 +49,7 @@ export type RetirementConfig = {
   monthly_invest: number;
   expected_return: number; // 年化報酬率，例如 0.065
   inflation: number;       // 年通膨率，例如 0.02
+  life_expectancy: number; // [NEW] 預估壽命設定
 };
 
 export type AiPortfolioState = {
@@ -117,7 +118,8 @@ const DEFAULT_STATE: AiPortfolioState = {
     monthly_spending: 50000,
     monthly_invest: 20000,
     expected_return: 0.07,
-    inflation: 0.02
+    inflation: 0.02,
+    life_expectancy: 85
   }
 };
 

@@ -55,13 +55,13 @@ export const RetirementPage: React.FC = () => {
       case 'die_to_zero':
         return {
           title: 'Die to Zero (花光為止法則)',
-          desc: '以「死前剛好把錢花光」為目標。規劃在預期壽命（假設為 85 歲）結束時，資產剛好歸零。此提領法則旨在最大化人生在世時的財富使用效率，將財富轉換為人生體驗。',
+          desc: `以「死前剛好把錢花光」為目標。規劃在預期壽命（預估為 ${retirement.life_expectancy ?? 85} 歲）結束時，資產剛好歸零。此提領法則旨在最大化人生在世時的財富使用效率，將財富轉換為人生體驗。`,
           detail: '優點：退休期間可享有更高的生活水平；缺點：如果活得比預期長，會面臨晚年無錢可用的「長壽風險」。'
         };
       default:
         return { title: '', desc: '', detail: '' };
     }
-  }, [withdrawalRule]);
+  }, [withdrawalRule, retirement.life_expectancy]);
 
   // 執行全生命週期（累積期 + 提領消耗期）的蒙地卡羅隨機模擬
   const fullLifeResult = useMemo(() => {
@@ -78,9 +78,9 @@ export const RetirementPage: React.FC = () => {
       retirement.inflation,
       retirement.monthly_spending,
       strategy,
-      85 // maxAge 預設為 85 歲
+      retirement.life_expectancy ?? 85 // maxAge 動態從 Context 取值
     );
-  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule]);
+  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule, retirement.life_expectancy]);
 
   // 將全生命週期蒙地卡羅結果轉換成 Recharts 格式
   const chartData = useMemo(() => {
@@ -134,7 +134,7 @@ export const RetirementPage: React.FC = () => {
     const retireAgeIndex = fullLifeResult.yearsArray.indexOf(targetRetirementAge);
     const expectedAssetAtRetire = retireAgeIndex !== -1 ? fullLifeResult.p50[retireAgeIndex] : 0;
     
-    const remainingYears = Math.max(1, 85 - targetRetirementAge);
+    const remainingYears = Math.max(1, (retirement.life_expectancy ?? 85) - targetRetirementAge);
     const rReal = Math.max(0.01, retirement.expected_return - retirement.inflation);
     
     const { annual, monthly } = calculateSpendingForDieToZero(expectedAssetAtRetire, rReal, remainingYears);
@@ -149,7 +149,7 @@ export const RetirementPage: React.FC = () => {
       diffPercent,
       remainingYears
     };
-  }, [fullLifeResult, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending]);
+  }, [fullLifeResult, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, retirement.life_expectancy]);
 
   const linesConfig = [
     { key: 'p95', name: '樂觀上限 (P95)', stroke: '#10b981' },
@@ -206,6 +206,28 @@ export const RetirementPage: React.FC = () => {
                     max="100"
                   />
                 </div>
+              </div>
+
+              {/* 預估壽命 */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1">個人預估壽命 (Life Expectancy)</label>
+                <input
+                  type="number"
+                  value={retirement.life_expectancy ?? 85}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    // 動態雙向安全護欄：目前年齡 + 5 ~ 120 歲
+                    const minAllowed = retirement.age + 5;
+                    const constrained = Math.min(120, Math.max(minAllowed, val));
+                    updateRetirementConfig('life_expectancy', constrained);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 font-mono"
+                  min={retirement.age + 5}
+                  max="120"
+                />
+                <span className="text-[9px] text-slate-400 font-medium block mt-1 leading-normal">
+                  💡 長壽精算終點，影響提領年數與年金均攤（防禦範圍：{retirement.age + 5} ~ 120 歲）。
+                </span>
               </div>
 
               {/* 每月開銷 */}
@@ -347,7 +369,7 @@ export const RetirementPage: React.FC = () => {
               在 {targetRetirementAge} 歲退休時，您預估可擁有中位數資產 <span className="text-blue-600 font-extrabold">${Math.round(dieToZeroResult.expectedAssetAtRetire).toLocaleString()}</span> 元。
             </h4>
             <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
-              依據您的設定，退休後實質複利報酬率為 <span className="font-bold text-slate-700">{((retirement.expected_return - retirement.inflation) * 100).toFixed(1)}%</span>。以 85 歲（剩餘 {dieToZeroResult.remainingYears} 年）財產歸零為目標進行年金均攤，退休後您的每月安全花費額度為：
+              依據您的設定，退休後實質複利報酬率為 <span className="font-bold text-slate-700">{((retirement.expected_return - retirement.inflation) * 100).toFixed(1)}%</span>。以 {retirement.life_expectancy ?? 85} 歲（剩餘 {dieToZeroResult.remainingYears} 年）財產歸零為目標進行年金均攤，退休後您的每月安全花費額度為：
             </p>
           </div>
 
@@ -382,13 +404,13 @@ export const RetirementPage: React.FC = () => {
               <span className="text-2xl font-black text-slate-700">
                 {fullLifeResult.depletionAgeP5 
                   ? `${fullLifeResult.depletionAgeP5} 歲花光` 
-                  : '🛡️ 85歲前安全無虞'}
+                  : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2">
               {fullLifeResult.depletionAgeP5 
                 ? `在市場極度低迷情況下，資產預計於退休後 ${fullLifeResult.depletionAgeP5 - targetRetirementAge} 年內耗盡。` 
-                : '即使在極端低迷行情下，資產也能安全支撐至 85 歲以上不枯竭。'}
+                : `即使在極端低迷行情下，資產也能安全支撐至 ${retirement.life_expectancy ?? 85} 歲以上不枯竭。`}
             </p>
           </div>
           {fullLifeResult.depletionAgeP5 && (
@@ -406,7 +428,7 @@ export const RetirementPage: React.FC = () => {
               <span className="text-2xl font-black text-slate-700">
                 {fullLifeResult.depletionAgeP50 
                   ? `${fullLifeResult.depletionAgeP50} 歲花光` 
-                  : '🛡️ 85歲前安全無虞'}
+                  : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2">
@@ -434,13 +456,13 @@ export const RetirementPage: React.FC = () => {
               <span className="text-2xl font-black text-slate-700">
                 {fullLifeResult.depletionAgeP95 
                   ? `${fullLifeResult.depletionAgeP95} 歲花光` 
-                  : '🛡️ 85歲前安全無虞'}
+                  : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2">
               {fullLifeResult.depletionAgeP95 
                 ? `在市場繁榮的大牛市行情下，資產仍將於 ${fullLifeResult.depletionAgeP95} 歲花光。` 
-                : '大牛市行情下，資產將呈爆發性增值，至 85 歲仍留有龐大餘額。'}
+                : `大牛市行情下，資產將呈爆發性增值，至 ${retirement.life_expectancy ?? 85} 歲仍留有龐大餘額。`}
             </p>
           </div>
           <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
