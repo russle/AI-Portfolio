@@ -6,7 +6,13 @@ import { ProgressBar } from '../components/ProgressBar';
 import { LineChart } from '../components/LineChart';
 import { StackedAreaChart } from '../components/StackedAreaChart';
 import { AlertBanner } from '../components/AlertBanner';
-import { calculateTotalPortfolioValue } from '../utils/rebalance';
+import {
+  calculateTotalPortfolioValue,
+  calculateSharpeRatio,
+  calculateMaxDrawdown,
+  calculateCorrelationMatrix,
+  CORRELATION_ASSET_LABELS
+} from '../utils/rebalance';
 import { 
   TrendingUp, 
   Layers, 
@@ -23,7 +29,10 @@ import {
   AlertCircle,
   CalendarPlus,
   Edit,
-  Trash2
+  Trash2,
+  Activity,
+  TrendingDown,
+  BarChart2
 } from 'lucide-react';
 
 // 還原資料的欄位合法性校驗
@@ -231,6 +240,15 @@ export const OverviewPage: React.FC = () => {
     return cagr;
   }, [portfolio.history]);
 
+  // [NEW] 進階風險分析指標
+  const sharpeRatio = useMemo(() => calculateSharpeRatio(portfolio.history), [portfolio.history]);
+  const maxDrawdown = useMemo(() => calculateMaxDrawdown(portfolio.history), [portfolio.history]);
+  const correlationMatrix = useMemo(() => calculateCorrelationMatrix(portfolio.history), [portfolio.history]);
+  const hasEnoughHistory = portfolio.history.length >= 3;
+  const hasGranularHistory = portfolio.history.filter(p =>
+    p.cash !== undefined && p.tw_stock !== undefined
+  ).length >= 3;
+
   // 4. FIRE 進度計算 (FIRE 目標 = monthly_spending * 12 * 25)
   const fireTarget = useMemo(() => {
     return retirement.monthly_spending * 12 * 25;
@@ -336,12 +354,12 @@ export const OverviewPage: React.FC = () => {
     <div className="space-y-8 animate-fade-in duration-300">
       
       {/* 財務摘要列 (Overview Bar) 五卡片升級版 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 select-none">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 select-none">
         
         {/* 1. 最新淨資產 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-blue-500">
+        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-blue-500 col-span-2 sm:col-span-1">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">最新淨資產 (TWD)</span>
-          <span className="text-2xl font-black text-slate-800 tracking-tight mt-1">
+          <span className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-1">
             ${totalNetWorth.toLocaleString()}
           </span>
           <div className="flex flex-wrap items-center gap-1.5 mt-1 select-none">
@@ -356,8 +374,8 @@ export const OverviewPage: React.FC = () => {
 
         {/* 2. 累計投入本金 */}
         <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-slate-400">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計投入本金 (TWD)</span>
-          <span className="text-2xl font-black text-slate-700 tracking-tight mt-1">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計投入本金</span>
+          <span className="text-xl sm:text-2xl font-black text-slate-700 tracking-tight mt-1">
             ${latestCumulativeInvestment.toLocaleString()}
           </span>
           <span className="text-[10px] text-slate-400 font-bold mt-1">每月歷史月誌累計儲蓄</span>
@@ -365,9 +383,9 @@ export const OverviewPage: React.FC = () => {
 
         {/* 3. 累計投資損益 & ROI */}
         <Card hoverEffect={false} className={`flex flex-col justify-center border-l-4 ${totalProfitAmt >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500'}`}>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計損益與總報酬</span>
-          <div className="flex items-baseline gap-1.5 mt-1">
-            <span className={`text-2xl font-black tracking-tight ${totalProfitAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計損益與報酬</span>
+          <div className="flex items-baseline gap-1 mt-1 flex-wrap">
+            <span className={`text-xl sm:text-2xl font-black tracking-tight ${totalProfitAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {totalProfitAmt >= 0 ? '+' : ''}${totalProfitAmt.toLocaleString()}
             </span>
             <span className={`text-xs font-bold flex items-center ${totalProfitAmt >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
@@ -375,25 +393,26 @@ export const OverviewPage: React.FC = () => {
               {totalRoi.toFixed(1)}%
             </span>
           </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">市值相較本金的複利剪刀差</span>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">市值相較本金複利剪刀差</span>
         </Card>
 
         {/* 4. 年化報酬率 */}
         <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-purple-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">CAGR 歷史年化報酬</span>
-          <span className="text-2xl font-black text-purple-600 tracking-tight mt-1">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">CAGR 年化報酬</span>
+          <span className="text-xl sm:text-2xl font-black text-purple-600 tracking-tight mt-1">
             {(cagrReturn * 100).toFixed(1)}%
           </span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">由歷史首尾淨值點幾何精算</span>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">由歷史首尾淨值幾何精算</span>
         </Card>
 
         {/* 5. FIRE 進度 */}
         <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-teal-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">FIRE 目標進度 ({firePercent.toFixed(1)}%)</span>
-          <div className="mt-2.5">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">FIRE 目標進度</span>
+          <span className="text-xl sm:text-2xl font-black text-teal-600 tracking-tight mt-1">{firePercent.toFixed(1)}%</span>
+          <div className="mt-1.5">
             <ProgressBar value={firePercent} showText={false} />
           </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">目標：${fireTarget.toLocaleString()} 元</span>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">目標：${fireTarget.toLocaleString()}</span>
         </Card>
 
       </div>
@@ -403,8 +422,137 @@ export const OverviewPage: React.FC = () => {
         <AlertBanner type="warning" message={deviationAlertMessage} />
       )}
 
+      {/* ── 📊 組合風險分析指標牆 ── */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 select-none">
+          <span className="p-1.5 bg-violet-50 text-violet-600 rounded-lg">
+            <Activity className="w-4 h-4" />
+          </span>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800">組合風險分析</h2>
+            <p className="text-[10px] font-semibold text-slate-400">由歷史快照序列自動精算的量化風險指標</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+          {/* 夏普比率 */}
+          <Card hoverEffect={false} className="flex flex-col border-l-4 border-l-violet-500 relative group">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Sharpe Ratio</span>
+              <span className="p-1 bg-violet-50 rounded-lg">
+                <BarChart2 className="w-3.5 h-3.5 text-violet-500" />
+              </span>
+            </div>
+            {hasEnoughHistory ? (
+              <>
+                <span className={`text-2xl font-black tracking-tight mt-1 ${
+                  sharpeRatio >= 1 ? 'text-emerald-600' : sharpeRatio >= 0 ? 'text-amber-500' : 'text-rose-600'
+                }`}>
+                  {sharpeRatio.toFixed(2)}
+                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                    sharpeRatio >= 1 ? 'bg-emerald-50 text-emerald-700' :
+                    sharpeRatio >= 0 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    {sharpeRatio >= 1 ? '✅ 優秀 ≥1' : sharpeRatio >= 0.5 ? '🟡 良好 ≥0.5' : sharpeRatio >= 0 ? '⚠️ 偏低' : '❌ 負值'}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-bold">越高越好</span>
+                </div>
+              </>
+            ) : (
+              <span className="text-sm text-slate-400 font-bold mt-2">需 ≥3 期歷史</span>
+            )}
+            {/* Tooltip */}
+            <div className="absolute bottom-full left-0 mb-2 w-52 bg-slate-800 text-white text-[10px] leading-relaxed p-2.5 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+              <p className="font-bold mb-1">📐 夏普比率（Sharpe Ratio）</p>
+              <p>= 超額年化報酬 ÷ 波動率（標準差）</p>
+              <p className="mt-1 text-slate-300">評估每承受一單位風險能獲得多少超額回報。≥1 為優秀，&lt;0 代表跑輸無風險利率。</p>
+            </div>
+          </Card>
+
+          {/* 最大回撤 */}
+          <Card hoverEffect={false} className="flex flex-col border-l-4 border-l-rose-500 relative group">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Max Drawdown</span>
+              <span className="p-1 bg-rose-50 rounded-lg">
+                <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+              </span>
+            </div>
+            {hasEnoughHistory ? (
+              <>
+                <span className={`text-2xl font-black tracking-tight mt-1 ${
+                  maxDrawdown > -0.1 ? 'text-emerald-600' : maxDrawdown > -0.25 ? 'text-amber-500' : 'text-rose-600'
+                }`}>
+                  {(maxDrawdown * 100).toFixed(1)}%
+                </span>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                    maxDrawdown > -0.1 ? 'bg-emerald-50 text-emerald-700' :
+                    maxDrawdown > -0.25 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    {maxDrawdown > -0.1 ? '✅ 控制良好' : maxDrawdown > -0.25 ? '⚠️ 中度回撤' : '❌ 重度回撤'}
+                  </span>
+                  <span className="text-[9px] text-slate-400 font-bold">越小越好</span>
+                </div>
+              </>
+            ) : (
+              <span className="text-sm text-slate-400 font-bold mt-2">需 ≥3 期歷史</span>
+            )}
+            <div className="absolute bottom-full left-0 mb-2 w-52 bg-slate-800 text-white text-[10px] leading-relaxed p-2.5 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+              <p className="font-bold mb-1">📉 最大回撤（Max Drawdown）</p>
+              <p>= 歷史高點到最低谷的最大跌幅</p>
+              <p className="mt-1 text-slate-300">反映最壞情況的虧損幅度。&lt;-25% 為重度回撤，需評估防禦配置是否充足。</p>
+            </div>
+          </Card>
+
+          {/* 資產分散評分 */}
+          <Card hoverEffect={false} className="flex flex-col border-l-4 border-l-sky-500 relative group">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">資產類別分散數</span>
+              <span className="p-1 bg-sky-50 rounded-lg">
+                <Layers className="w-3.5 h-3.5 text-sky-500" />
+              </span>
+            </div>
+            {(() => {
+              const activeAssets = [
+                portfolio.cash > 0,
+                portfolio.fund > 0,
+                portfolio.tw_stock > 0,
+                portfolio.us_stock > 0,
+                portfolio.crypto > 0
+              ].filter(Boolean).length;
+              return (
+                <>
+                  <span className={`text-2xl font-black tracking-tight mt-1 ${
+                    activeAssets >= 4 ? 'text-emerald-600' : activeAssets >= 3 ? 'text-amber-500' : 'text-rose-600'
+                  }`}>
+                    {activeAssets} / 5
+                  </span>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${
+                      activeAssets >= 4 ? 'bg-emerald-50 text-emerald-700' :
+                      activeAssets >= 3 ? 'bg-amber-50 text-amber-700' : 'bg-rose-50 text-rose-700'
+                    }`}>
+                      {activeAssets >= 4 ? '✅ 高度分散' : activeAssets >= 3 ? '🟡 中度分散' : '⚠️ 集中度偏高'}
+                    </span>
+                  </div>
+                </>
+              );
+            })()}
+            <div className="absolute bottom-full left-0 mb-2 w-52 bg-slate-800 text-white text-[10px] leading-relaxed p-2.5 rounded-xl shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+              <p className="font-bold mb-1">🎯 資產分散度</p>
+              <p>統計目前持有餘額大於 0 的資產類別數量（現金/台股/美股/基金/加密）。</p>
+              <p className="mt-1 text-slate-300">持有 4 種以上視為充分分散，可有效降低單一資產暴跌風險。</p>
+            </div>
+          </Card>
+
+        </div>
+      </div>
+
       {/* 中間主要圖表區域 */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* 左側：資產成長趨勢折線圖 / 堆疊面積圖 */}
         <div className="lg:col-span-2">
@@ -477,43 +625,107 @@ export const OverviewPage: React.FC = () => {
           </Card>
         </div>
 
-        {/* 右側：被動投資宣導 + 數據備份與還原 */}
-        <div className="flex flex-col gap-6">
-          {/* 上部：宣導卡片 */}
-          <Card hoverEffect={false} className="flex flex-col bg-slate-900 border-transparent text-slate-200">
-            <div className="mb-6">
-              <h2 className="text-base font-bold text-white">經典指數化配置戰略</h2>
-              <p className="text-xs text-slate-400 mt-1">傳承長期持有與鐵律再平衡的資產防禦板塊</p>
+        {/* 右側：相關性熱圖 + 數據備份 */}
+        <div className="flex flex-col gap-5">
+          {/* 上部：相關性熱圖 */}
+          <Card hoverEffect={false} className="flex flex-col">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                <Activity className="w-4 h-4" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">資產相關性熱圖</h2>
+                <p className="text-[10px] text-slate-400 font-semibold">各類資產間的歷史相關係數</p>
+              </div>
             </div>
-            
-            <div className="space-y-4 flex-1 text-xs leading-relaxed text-slate-300">
-              <p>
-                本系統將您的總體淨資產細分為五大核心投資類別，並依照您的風險屬性要求嚴格實施「目標比例追蹤」。
-              </p>
-              <p>
-                指數化被動投資成功的基石，並非尋求超額報酬，而是透過將資金分佈於全球股市與避險載體中，依靠**低成本的 ETF 樂高式套用**以及**定期定量的紀律再平衡**，抹平波動，實現家庭資產長期穩定增值。
-              </p>
-              <p className="border-t border-slate-800 pt-4 text-[10px] text-slate-500 font-semibold">
-                提示：如當前財務指標出現「偏離警示」，代表個別資產已產生漂移，請前往平衡控制台調整以規避過度風險。
-              </p>
-            </div>
+
+            {hasGranularHistory ? (
+              <div className="overflow-x-auto">
+                <div className="min-w-[200px]">
+                  {/* 欄標題 */}
+                  <div className="flex mb-1">
+                    <div className="w-14 flex-shrink-0" />
+                    {CORRELATION_ASSET_LABELS.map(label => (
+                      <div key={label} className="flex-1 text-center text-[9px] font-black text-slate-500 truncate px-0.5">{label}</div>
+                    ))}
+                  </div>
+                  {/* 熱圖矩陣 */}
+                  {correlationMatrix.map((row, i) => (
+                    <div key={i} className="flex mb-1 items-center">
+                      <div className="w-14 text-[9px] font-black text-slate-500 flex-shrink-0 truncate pr-1">
+                        {CORRELATION_ASSET_LABELS[i]}
+                      </div>
+                      {row.map((val, j) => {
+                        let bg = 'bg-slate-100';
+                        let textColor = 'text-slate-400';
+                        if (i === j) {
+                          bg = 'bg-slate-200'; textColor = 'text-slate-600';
+                        } else if (val >= 0.7) {
+                          bg = 'bg-rose-500'; textColor = 'text-white';
+                        } else if (val >= 0.4) {
+                          bg = 'bg-rose-200'; textColor = 'text-rose-800';
+                        } else if (val >= 0.1) {
+                          bg = 'bg-rose-50'; textColor = 'text-rose-600';
+                        } else if (val <= -0.7) {
+                          bg = 'bg-blue-500'; textColor = 'text-white';
+                        } else if (val <= -0.4) {
+                          bg = 'bg-blue-200'; textColor = 'text-blue-800';
+                        } else if (val <= -0.1) {
+                          bg = 'bg-blue-50'; textColor = 'text-blue-600';
+                        }
+                        return (
+                          <div
+                            key={j}
+                            title={`${CORRELATION_ASSET_LABELS[i]} vs ${CORRELATION_ASSET_LABELS[j]}: ${val.toFixed(2)}`}
+                            className={`flex-1 aspect-square flex items-center justify-center text-[9px] font-black rounded mx-0.5 cursor-default transition-transform hover:scale-110 ${bg} ${textColor}`}
+                          >
+                            {i === j ? '—' : val.toFixed(2)}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
+                  {/* 色彩圖例 */}
+                  <div className="flex items-center gap-2 mt-3 text-[9px] font-bold text-slate-400">
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded bg-blue-500" />
+                      <span>負相關</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded bg-slate-100 border border-slate-200" />
+                      <span>無相關</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2.5 h-2.5 rounded bg-rose-500" />
+                      <span>正相關</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-6 text-center">
+                <span className="text-3xl mb-2">📊</span>
+                <p className="text-xs font-bold text-slate-600">需要 ≥3 期含細分資產的快照</p>
+                <p className="text-[10px] text-slate-400 mt-1">補記快照時請填入各類資產金額</p>
+              </div>
+            )}
           </Card>
 
-          {/* 下部：資料安全與備份控制面板 */}
+          {/* 下部：資料備份與還原 */}
           <Card hoverEffect={false} className="flex flex-col bg-white/70 backdrop-blur-md border border-slate-200/80 shadow-md">
             <div className="flex items-center gap-3 mb-4 select-none">
               <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
                 <Database className="w-5 h-5" />
               </span>
               <div>
-                <h2 className="text-sm font-black text-slate-800">資料安全與備份控制台</h2>
+                <h2 className="text-sm font-black text-slate-800">資料備份控制台</h2>
                 <p className="text-[10px] text-slate-400 font-bold">本地數據一鍵下載與備份還原</p>
               </div>
             </div>
 
             <div className="space-y-3">
               <p className="text-[11px] leading-relaxed text-slate-500">
-                由於目前數據安全儲存於您的瀏覽器本地空間，建議定期下載備份檔案以防資產歷史丟失。
+                數據安全儲存於瀏覽器本地空間，建議定期下載備份檔案以防資產歷史丟失。
               </p>
 
               {backupMsg && (
@@ -531,7 +743,7 @@ export const OverviewPage: React.FC = () => {
                   className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  匯出備份 (JSON)
+                  匯出備份
                 </button>
 
                 <button
@@ -539,7 +751,7 @@ export const OverviewPage: React.FC = () => {
                   className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
                 >
                   <Upload className="w-3.5 h-3.5 text-indigo-500" />
-                  導入備份檔案
+                  導入備份
                 </button>
                 <input
                   type="file"

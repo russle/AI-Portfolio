@@ -151,3 +151,107 @@ export const calculateThresholdRebalance = (
     };
   });
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 進階風險分析指標計算函數（由歷史月誌 net_worth 序列推導）
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type { PortfolioHistoryPoint } from '../context/AppContext';
+
+/** 由 net_worth 序列算出逐期月報酬率 */
+const getMonthlyReturns = (history: PortfolioHistoryPoint[]): number[] => {
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  const returns: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1].net_worth;
+    const curr = sorted[i].net_worth;
+    if (prev > 0) returns.push((curr - prev) / prev);
+  }
+  return returns;
+};
+
+/**
+ * 最大回撤 (Max Drawdown)
+ * 回傳值為負數，例如 -0.35 代表最大曾跌 35%
+ */
+export const calculateMaxDrawdown = (history: PortfolioHistoryPoint[]): number => {
+  if (history.length < 2) return 0;
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  let peak = sorted[0].net_worth;
+  let maxDD = 0;
+  for (const point of sorted) {
+    if (point.net_worth > peak) peak = point.net_worth;
+    const drawdown = peak > 0 ? (point.net_worth - peak) / peak : 0;
+    if (drawdown < maxDD) maxDD = drawdown;
+  }
+  return maxDD;
+};
+
+/**
+ * 夏普比率 (Sharpe Ratio)
+ * = (平均月報酬 - 月無風險利率) / 月報酬標準差 × √12
+ * 預設年化無風險利率 riskFreeRate = 0.02（2%）
+ */
+export const calculateSharpeRatio = (
+  history: PortfolioHistoryPoint[],
+  riskFreeRate = 0.02
+): number => {
+  const returns = getMonthlyReturns(history);
+  if (returns.length < 3) return 0;
+  const monthlyRfr = riskFreeRate / 12;
+  const excessReturns = returns.map(r => r - monthlyRfr);
+  const mean = excessReturns.reduce((s, r) => s + r, 0) / excessReturns.length;
+  const variance = excessReturns.reduce((s, r) => s + Math.pow(r - mean, 2), 0) / excessReturns.length;
+  const stdDev = Math.sqrt(variance);
+  if (stdDev === 0) return 0;
+  return (mean / stdDev) * Math.sqrt(12);
+};
+
+/**
+ * 資產相關係數矩陣 (Correlation Matrix)
+ * 針對五大類（cash, fund, tw_stock, us_stock, crypto）各期金額序列計算相關性
+ * 回傳 5×5 矩陣（陣列順序：cash, tw_stock, us_stock, fund, crypto）
+ */
+const ASSET_KEYS_ORDER: Array<'cash' | 'tw_stock' | 'us_stock' | 'fund' | 'crypto'> = [
+  'cash', 'tw_stock', 'us_stock', 'fund', 'crypto'
+];
+
+export const CORRELATION_ASSET_LABELS = ['現金', '台股', '美股', '基金/債', '加密'];
+
+const pearsonCorrelation = (x: number[], y: number[]): number => {
+  const n = x.length;
+  if (n < 2) return 0;
+  const meanX = x.reduce((s, v) => s + v, 0) / n;
+  const meanY = y.reduce((s, v) => s + v, 0) / n;
+  const num = x.reduce((s, v, i) => s + (v - meanX) * (y[i] - meanY), 0);
+  const denX = Math.sqrt(x.reduce((s, v) => s + Math.pow(v - meanX, 2), 0));
+  const denY = Math.sqrt(y.reduce((s, v) => s + Math.pow(v - meanY, 2), 0));
+  if (denX === 0 || denY === 0) return 0;
+  return num / (denX * denY);
+};
+
+export const calculateCorrelationMatrix = (
+  history: PortfolioHistoryPoint[]
+): number[][] => {
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  // 過濾出有細分資產數據的期次
+  const valid = sorted.filter(p =>
+    p.cash !== undefined && p.tw_stock !== undefined &&
+    p.us_stock !== undefined && p.fund !== undefined && p.crypto !== undefined
+  );
+
+  const series: Record<string, number[]> = {
+    cash: valid.map(p => p.cash ?? 0),
+    tw_stock: valid.map(p => p.tw_stock ?? 0),
+    us_stock: valid.map(p => p.us_stock ?? 0),
+    fund: valid.map(p => p.fund ?? 0),
+    crypto: valid.map(p => p.crypto ?? 0),
+  };
+
+  return ASSET_KEYS_ORDER.map(keyA =>
+    ASSET_KEYS_ORDER.map(keyB => {
+      if (keyA === keyB) return 1;
+      return parseFloat(pearsonCorrelation(series[keyA], series[keyB]).toFixed(3));
+    })
+  );
+};

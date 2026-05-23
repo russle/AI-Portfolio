@@ -178,13 +178,50 @@ const Navbar: React.FC = () => {
   );
 };
 
+// 行動端底部固定 Tab Bar（只在 lg 以下顯示）
+const MobileTabBar: React.FC = () => {
+  const tabItems = [
+    { to: '/', label: '總覽', icon: <Compass className="w-5 h-5" /> },
+    { to: '/allocation', label: '配置', icon: <Percent className="w-5 h-5" /> },
+    { to: '/rebalance', label: '平衡', icon: <Scale className="w-5 h-5" /> },
+    { to: '/retirement', label: '退休', icon: <TrendingUp className="w-5 h-5" /> },
+    { to: '/order', label: '下單', icon: <DollarSign className="w-5 h-5" /> },
+    { to: '/backtest', label: '回測', icon: <History className="w-5 h-5" /> },
+    { to: '/scenario', label: '壓測', icon: <ShieldAlert className="w-5 h-5" /> },
+  ];
+
+  return (
+    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg">
+      <div className="flex items-stretch">
+        {tabItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.to === '/'}
+            className={({ isActive }) => `
+              flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-center transition-all select-none
+              ${isActive
+                ? 'text-blue-600 bg-blue-50/70'
+                : 'text-slate-400 hover:text-slate-600'
+              }
+            `}
+          >
+            {item.icon}
+            <span className="text-[9px] font-black">{item.label}</span>
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-tr from-sky-50/20 via-white to-slate-50/40 text-slate-800 flex flex-col font-sans selection:bg-blue-500/20 selection:text-blue-800">
       <Navbar />
 
       {/* 核心多路由頁面渲染區 */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8">
         <Routes>
           <Route path="/" element={<OverviewPage />} />
           <Route path="/allocation" element={<AllocationPage />} />
@@ -196,8 +233,11 @@ export const AppContent: React.FC = () => {
         </Routes>
       </main>
 
+      {/* 行動端底部 Tab Bar 導航（淡出 lg 更大設備） */}
+      <MobileTabBar />
+
       {/* 頁尾 */}
-      <footer className="max-w-7xl w-full mx-auto px-4 text-center mt-12 border-t border-slate-200/50 py-6 text-[10px] text-slate-400 font-semibold tracking-wide space-y-1">
+      <footer className="hidden lg:block max-w-7xl w-full mx-auto px-4 text-center mt-12 border-t border-slate-200/50 py-6 text-[10px] text-slate-400 font-semibold tracking-wide space-y-1">
         <p>AI資產配置戰略總覽互動式多頁 Web App • 所有計算均參考長期歷史大數據，不構成具體投資建議。</p>
         <p>© 2026. Built with React + React Router + Recharts + Tailwind CSS. Designed for Long-Term Passive Investors.</p>
       </footer>
