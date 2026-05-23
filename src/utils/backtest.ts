@@ -8,6 +8,7 @@ export interface BacktestPoint {
   date: string;       // YYYY-MM
   portfolioValue: number;
   benchmarkValue: number;
+  actualValue?: number; // [NEW] 真實持股走勢本利和
   totalInvested: number;
 }
 
@@ -16,6 +17,7 @@ export interface BacktestResult {
   metrics: {
     portfolio: PerformanceMetrics;
     benchmark: PerformanceMetrics;
+    actual?: PerformanceMetrics; // [NEW] 真實持股配置績效指標
   };
   crisisMetrics: CrisisMetrics[];
 }
@@ -35,8 +37,10 @@ export interface CrisisMetrics {
   period: string;
   portfolioDrop: number;      // 配置組合跌幅 (%)
   benchmarkDrop: number;      // 對照組跌幅 (%)
+  actualDrop?: number;         // [NEW] 真實持股跌幅 (%)
   portfolioRecovery: number;  // 配置復原月數 (-1 代表尚未復原)
   benchmarkRecovery: number;  // 對照組復原月數 (-1 代表尚未復原)
+  actualRecovery?: number;     // [NEW] 真實持股復原月數
   isAvailable: boolean;       // 該事件是否在目前回測的時間軸內
 }
 
@@ -370,28 +374,31 @@ const evaluateCrisisPerformance = (
       period: crisis.period,
       portfolioDrop: 0,
       benchmarkDrop: 0,
+      actualDrop: undefined,
       portfolioRecovery: -1,
       benchmarkRecovery: -1,
+      actualRecovery: undefined,
       isAvailable: false
     };
   }
 
   const calcDropAndRecovery = (
-    key: 'portfolioValue' | 'benchmarkValue'
+    key: 'portfolioValue' | 'benchmarkValue' | 'actualValue'
   ): { drop: number; recovery: number } => {
-    // 找出在 peakMonth 到 bottomMonth (若 bottomMonth 在範圍內) 或後續的最低點
-    // 為求精確，我們直接在 peakMonth 之後的區間找「最低跌幅」
     const peakIndex = history.findIndex(p => p.date === crisis.peakMonth);
     if (peakIndex === -1) return { drop: 0, recovery: -1 };
 
-    const peakVal = history[peakIndex][key];
+    const peakVal = history[peakIndex][key] || 0;
+    if (peakVal === 0) return { drop: 0, recovery: -1 };
+
     let minVal = peakVal;
 
     // 我們只在危機核心期 (核心期設定為高峰後 12 個月內) 尋找最低點
     const searchEndIndex = Math.min(history.length, peakIndex + 13);
     for (let i = peakIndex; i < searchEndIndex; i++) {
-      if (history[i][key] < minVal) {
-        minVal = history[i][key];
+      const currentVal = history[i][key] || 0;
+      if (currentVal < minVal && currentVal > 0) {
+        minVal = currentVal;
       }
     }
 
@@ -400,7 +407,8 @@ const evaluateCrisisPerformance = (
     // 尋找復原月數：從 peakIndex 開始，重新回到或超越 peakVal 的月份
     let recovery = -1;
     for (let i = peakIndex + 1; i < history.length; i++) {
-      if (history[i][key] >= peakVal) {
+      const currentVal = history[i][key] || 0;
+      if (currentVal >= peakVal && currentVal > 0) {
         recovery = i - peakIndex;
         break;
       }
@@ -414,14 +422,19 @@ const evaluateCrisisPerformance = (
 
   const portRes = calcDropAndRecovery('portfolioValue');
   const benchRes = calcDropAndRecovery('benchmarkValue');
+  
+  const hasActual = history.length > 0 && history[0].actualValue !== undefined;
+  const actualRes = hasActual ? calcDropAndRecovery('actualValue') : undefined;
 
   return {
     name: crisis.name,
     period: crisis.period,
     portfolioDrop: portRes.drop,
     benchmarkDrop: benchRes.drop,
+    actualDrop: actualRes?.drop,
     portfolioRecovery: portRes.recovery,
     benchmarkRecovery: benchRes.recovery,
+    actualRecovery: actualRes?.recovery,
     isAvailable: true
   };
 };
@@ -435,7 +448,8 @@ export const runBacktest = async (
   range: '1y' | '3y' | '5y' | '10y',
   initialAmount: number,
   monthlyInvest: number,
-  rebalanceFreq: 'none' | 'monthly' | 'yearly'
+  rebalanceFreq: 'none' | 'monthly' | 'yearly',
+  actualAllocation?: AllocationTarget // [NEW] 當前真實持股大類佔比
 ): Promise<BacktestResult> => {
   // 1. 同步拉取四個實體資產的歷史價格 Map
   const twPrices = await fetchHistoricalPrices(symbols.tw_stock, range) || FALLBACK_HISTORICAL_DATA['0050.TW'];
@@ -471,6 +485,15 @@ export const runBacktest = async (
   let portCash = 0;
   let currentInvested = initialAmount;
 
+  // [NEW] 當前真實持股資產持股數與現金
+  let actualShares = {
+    tw_stock: 0,
+    us_stock: 0,
+    fund: 0,
+    crypto: 0
+  };
+  let actualCash = 0;
+
   // 對照組：100% 台股，初始金額全部買入台股
   let benchmarkShares = 0;
   let benchmarkInvested = initialAmount;
@@ -494,6 +517,14 @@ export const runBacktest = async (
       portShares.fund = (initialAmount * allocation.bond) / pFund;
       portShares.crypto = (initialAmount * allocation.crypto) / pCrypto;
       portCash = initialAmount * allocation.cash;
+
+      if (actualAllocation) {
+        actualShares.tw_stock = (initialAmount * actualAllocation.tw_stock) / pTw;
+        actualShares.us_stock = (initialAmount * actualAllocation.us_stock) / pUs;
+        actualShares.fund = (initialAmount * actualAllocation.bond) / pFund;
+        actualShares.crypto = (initialAmount * actualAllocation.crypto) / pCrypto;
+        actualCash = initialAmount * actualAllocation.cash;
+      }
       
       // 對照組初始化
       benchmarkShares = initialAmount / pTw;
@@ -511,6 +542,14 @@ export const runBacktest = async (
       // 現金複利利息與定期定額現金配比
       portCash = portCash * (1 + cashMonthlyRate) + (monthlyInvest * allocation.cash);
 
+      if (actualAllocation) {
+        actualShares.tw_stock += (monthlyInvest * actualAllocation.tw_stock) / pTw;
+        actualShares.us_stock += (monthlyInvest * actualAllocation.us_stock) / pUs;
+        actualShares.fund += (monthlyInvest * actualAllocation.bond) / pFund;
+        actualShares.crypto += (monthlyInvest * actualAllocation.crypto) / pCrypto;
+        actualCash = actualCash * (1 + cashMonthlyRate) + (monthlyInvest * actualAllocation.cash);
+      }
+
       // --- B. 對照組定期定額加碼 ---
       benchmarkInvested += monthlyInvest;
       benchmarkShares += monthlyInvest / pTw;
@@ -523,6 +562,16 @@ export const runBacktest = async (
       (portShares.fund * pFund) +
       (portShares.crypto * pCrypto) +
       portCash;
+
+    let actualVal = 0;
+    if (actualAllocation) {
+      actualVal = 
+        (actualShares.tw_stock * pTw) +
+        (actualShares.us_stock * pUs) +
+        (actualShares.fund * pFund) +
+        (actualShares.crypto * pCrypto) +
+        actualCash;
+    }
 
     let benchVal = benchmarkShares * pTw;
 
@@ -537,12 +586,21 @@ export const runBacktest = async (
       portShares.fund = (portVal * allocation.bond) / pFund;
       portShares.crypto = (portVal * allocation.crypto) / pCrypto;
       portCash = portVal * allocation.cash;
+
+      if (actualAllocation) {
+        actualShares.tw_stock = (actualVal * actualAllocation.tw_stock) / pTw;
+        actualShares.us_stock = (actualVal * actualAllocation.us_stock) / pUs;
+        actualShares.fund = (actualVal * actualAllocation.bond) / pFund;
+        actualShares.crypto = (actualVal * actualAllocation.crypto) / pCrypto;
+        actualCash = actualVal * actualAllocation.cash;
+      }
     }
 
     historyPoints.push({
       date: month,
       portfolioValue: Math.round(portVal),
       benchmarkValue: Math.round(benchVal),
+      actualValue: actualAllocation ? Math.round(actualVal) : undefined,
       totalInvested: currentInvested
     });
   }
@@ -555,6 +613,10 @@ export const runBacktest = async (
   const portfolioMetrics = calculateMetricsForSeries(portfolioValues, investedValues, commonMonths.length);
   const benchmarkMetrics = calculateMetricsForSeries(benchmarkValues, investedValues, commonMonths.length);
 
+  const actualMetrics = actualAllocation
+    ? calculateMetricsForSeries(historyPoints.map(p => p.actualValue || 0), investedValues, commonMonths.length)
+    : undefined;
+
   // 5. 計算重大危機事件對比
   const crisisMetrics = CRISIS_EVENTS.map(crisis => {
     // 檢查危機起始點是否包含在時間軸內
@@ -565,8 +627,10 @@ export const runBacktest = async (
         period: crisis.period,
         portfolioDrop: 0,
         benchmarkDrop: 0,
+        actualDrop: undefined,
         portfolioRecovery: -1,
         benchmarkRecovery: -1,
+        actualRecovery: undefined,
         isAvailable: false
       };
     }
@@ -577,7 +641,8 @@ export const runBacktest = async (
     history: historyPoints,
     metrics: {
       portfolio: portfolioMetrics,
-      benchmark: benchmarkMetrics
+      benchmark: benchmarkMetrics,
+      actual: actualMetrics
     },
     crisisMetrics
   };

@@ -33,7 +33,7 @@ import {
 
 export const BacktestPage: React.FC = () => {
   const { state } = useApp();
-  const { allocation_target } = state;
+  const { allocation_target, portfolio } = state;
 
   // 1. 回測模擬參數狀態
   const [range, setRange] = useState<'1y' | '3y' | '5y' | '10y'>('10y');
@@ -48,6 +48,42 @@ export const BacktestPage: React.FC = () => {
     fund: 'BND',
     crypto: 'BTC-USD'
   });
+
+  // 動態精算當前真實持股的大類佔比
+  const actualAllocation = useMemo(() => {
+    const holdings = portfolio.holdings || [];
+    const cash = portfolio.cash || 0;
+    const usdRate = portfolio.usdRate ?? 32.2;
+    
+    let twStockVal = 0;
+    let usStockVal = 0;
+    let fundVal = 0;
+    let cryptoVal = 0;
+    
+    holdings.forEach(h => {
+      const priceTwd = h.currency === 'USD' ? h.currentPrice * usdRate : h.currentPrice;
+      const val = Math.round(h.shares * priceTwd);
+      
+      if (h.assetType === 'tw_stock') twStockVal += val;
+      else if (h.assetType === 'us_stock') usStockVal += val;
+      else if (h.assetType === 'fund') fundVal += val;
+      else if (h.assetType === 'crypto') cryptoVal += val;
+    });
+    
+    const totalVal = twStockVal + usStockVal + fundVal + cryptoVal + cash;
+    
+    if (totalVal === 0) {
+      return null;
+    }
+    
+    return {
+      tw_stock: twStockVal / totalVal,
+      us_stock: usStockVal / totalVal,
+      bond: fundVal / totalVal,
+      cash: cash / totalVal,
+      crypto: cryptoVal / totalVal
+    };
+  }, [portfolio.holdings, portfolio.cash, portfolio.usdRate]);
 
   // 2. 回測結果狀態
   const [backtestResult, setBacktestResult] = useState<BacktestResult | null>(null);
@@ -67,13 +103,16 @@ export const BacktestPage: React.FC = () => {
       // 延遲 500ms，以展現高質感的骨架屏載入動畫，避免切換時過於生硬
       await new Promise((resolve) => setTimeout(resolve, 550));
 
+      const actualAllocParam = (portfolio.isHoldingMode && actualAllocation) ? actualAllocation : undefined;
+
       const res = await runBacktest(
         allocation_target,
         symbols,
         targetRange,
         targetInitial,
         targetMonthly,
-        targetFreq
+        targetFreq,
+        actualAllocParam // 傳入真實配置大類佔比
       );
       setBacktestResult(res);
     } catch (err: any) {
@@ -86,7 +125,7 @@ export const BacktestPage: React.FC = () => {
   // 元件載入時，自動觸發第一次回測模擬
   useEffect(() => {
     executeBacktest();
-  }, [allocation_target]); // 當全域目標配置改變時，自動重新計算
+  }, [allocation_target, portfolio.isHoldingMode, actualAllocation]); // 當全域配置或真實持股改變時重算
 
   // 格式化 Y 軸數值 (萬 / 億)
   const formatYAxis = (val: number) => {
@@ -364,6 +403,11 @@ export const BacktestPage: React.FC = () => {
                   <div className="text-base font-black font-mono text-blue-600">
                     {backtestResult ? formatYAxis(backtestResult.metrics.portfolio.finalValue) : '$-'}
                   </div>
+                  {backtestResult?.metrics.actual && (
+                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
+                      真實持股: {formatYAxis(backtestResult.metrics.actual.finalValue)}
+                    </div>
+                  )}
                   <div className="text-[9px] font-bold text-slate-400 mt-1">
                     投入: {backtestResult ? formatYAxis(backtestResult.metrics.portfolio.totalInvested) : '-'}
                   </div>
@@ -382,6 +426,11 @@ export const BacktestPage: React.FC = () => {
                     {backtestResult ? `${backtestResult.metrics.portfolio.cagr}%` : '-%'}
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
                   </div>
+                  {backtestResult?.metrics.actual && (
+                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
+                      真實持股: {backtestResult.metrics.actual.cagr}%
+                    </div>
+                  )}
                   <div className="text-[9px] font-bold text-slate-400 mt-1">
                     對照組: {backtestResult ? `${backtestResult.metrics.benchmark.cagr}%` : '-'}
                   </div>
@@ -400,6 +449,11 @@ export const BacktestPage: React.FC = () => {
                     {backtestResult ? `${backtestResult.metrics.portfolio.maxDrawdown}%` : '-%'}
                     <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
                   </div>
+                  {backtestResult?.metrics.actual && (
+                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
+                      真實持股: {backtestResult.metrics.actual.maxDrawdown}%
+                    </div>
+                  )}
                   <div className="text-[9px] font-bold text-slate-400 mt-1">
                     對照組: {backtestResult ? `${backtestResult.metrics.benchmark.maxDrawdown}%` : '-'}
                   </div>
@@ -427,6 +481,11 @@ export const BacktestPage: React.FC = () => {
                       </span>
                     )}
                   </div>
+                  {backtestResult?.metrics.actual && (
+                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
+                      真實持股: {backtestResult.metrics.actual.sharpeRatio}
+                    </div>
+                  )}
                   <div className="text-[9px] font-bold text-slate-400 mt-1">
                     對照組: {backtestResult ? backtestResult.metrics.benchmark.sharpeRatio : '-'}
                   </div>
@@ -453,6 +512,12 @@ export const BacktestPage: React.FC = () => {
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
                   <span className="text-slate-600">我的配置組合</span>
                 </span>
+                {portfolio.isHoldingMode && actualAllocation && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span className="text-slate-600">當前真實持股組合</span>
+                  </span>
+                )}
                 <span className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
                   <span className="text-slate-600">對照組 (100% 台股)</span>
@@ -480,6 +545,10 @@ export const BacktestPage: React.FC = () => {
                       <linearGradient id="grad-portfolio" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="grad-actual" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
                       </linearGradient>
                       <linearGradient id="grad-benchmark" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#94a3b8" stopOpacity={0.15} />
@@ -524,6 +593,7 @@ export const BacktestPage: React.FC = () => {
                       formatter={(value: any, name: any) => {
                         const formattedVal = formatCurrency(Number(value));
                         if (name === 'portfolioValue') return [formattedVal, '配置組合本利和'];
+                        if (name === 'actualValue') return [formattedVal, '當前真實持股本利和'];
                         if (name === 'benchmarkValue') return [formattedVal, '對照組本利和'];
                         if (name === 'totalInvested') return [formattedVal, '累計投入本金'];
                         return [formattedVal, name];
@@ -602,6 +672,19 @@ export const BacktestPage: React.FC = () => {
                       dot={false}
                       activeDot={{ r: 5, strokeWidth: 0, fill: '#94a3b8' }}
                     />
+
+                    {/* 當前真實持股走勢 (有數據時繪製) */}
+                    {portfolio.isHoldingMode && actualAllocation && backtestResult?.metrics.actual && (
+                      <Area
+                        type="monotone"
+                        dataKey="actualValue"
+                        stroke="#f59e0b"
+                        strokeWidth={2.5}
+                        fill="url(#grad-actual)"
+                        dot={false}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: '#f59e0b' }}
+                      />
+                    )}
 
                     {/* 配置組合走勢 */}
                     <Area
@@ -688,26 +771,42 @@ export const BacktestPage: React.FC = () => {
                           <div className="text-[9px] font-bold text-slate-500 mb-2 flex justify-between">
                             <span>極端最大跌幅對決</span>
                             <span className="text-rose-500 text-[10px]">
-                              防禦率: <strong className="font-extrabold">
+                              理想組合比大盤防禦力: <strong className="font-extrabold">
                                 {Math.max(0, Math.round(matchedMetric.benchmarkDrop - matchedMetric.portfolioDrop))}%
                               </strong>
                             </span>
                           </div>
                           
-                          <div className="space-y-2">
+                          <div className="space-y-2.5">
                             {/* 配置組合 */}
                             <div>
                               <div className="flex justify-between text-[9px] font-bold text-slate-600 mb-1">
-                                <span>我的配置組合</span>
+                                <span>我的目標配置 (理想藍圖)</span>
                                 <span className="text-blue-600 font-mono">{matchedMetric.portfolioDrop.toFixed(2)}%</span>
                               </div>
-                              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                 <div 
                                   className="bg-blue-500 h-full rounded-full transition-all duration-1000" 
                                   style={{ width: `${Math.min(100, Math.abs(matchedMetric.portfolioDrop) * 2)}%` }}
                                 ></div>
                               </div>
                             </div>
+
+                            {/* 當前真實持股 [NEW] */}
+                            {matchedMetric.actualDrop !== undefined && (
+                              <div>
+                                <div className="flex justify-between text-[9px] font-bold text-amber-500 mb-1">
+                                  <span>當前真實持股 (實際偏離)</span>
+                                  <span className="text-amber-600 font-mono">{matchedMetric.actualDrop.toFixed(2)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div 
+                                    className="bg-amber-500 h-full rounded-full transition-all duration-1000" 
+                                    style={{ width: `${Math.min(100, Math.abs(matchedMetric.actualDrop) * 2)}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            )}
                             
                             {/* 對照組 */}
                             <div>
@@ -715,7 +814,7 @@ export const BacktestPage: React.FC = () => {
                                 <span>100% 台股對照組</span>
                                 <span className="text-slate-600 font-mono">{matchedMetric.benchmarkDrop.toFixed(2)}%</span>
                               </div>
-                              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                 <div 
                                   className="bg-slate-400 h-full rounded-full transition-all duration-1000" 
                                   style={{ width: `${Math.min(100, Math.abs(matchedMetric.benchmarkDrop) * 2)}%` }}
@@ -726,28 +825,40 @@ export const BacktestPage: React.FC = () => {
                         </div>
 
                         {/* 復原速度對抗 */}
-                        <div className="grid grid-cols-2 gap-4 pt-2">
-                          <div className="p-2.5 bg-blue-50/50 border border-blue-100/50 rounded-xl">
-                            <div className="text-[8px] font-bold text-blue-500">配置復原時間</div>
-                            <div className="text-xs font-black text-blue-700 mt-1 font-mono">
+                        <div className={`grid gap-2.5 pt-2 ${matchedMetric.actualRecovery !== undefined ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                          <div className="p-2 bg-blue-50/50 border border-blue-100/50 rounded-xl flex flex-col justify-between">
+                            <div className="text-[7.5px] font-bold text-blue-500">目標配置復原</div>
+                            <div className="text-[10px] font-black text-blue-700 mt-0.5 font-mono">
                               {matchedMetric.portfolioRecovery === -1 
-                                ? '尚未復原 ⚠️' 
-                                : `${matchedMetric.portfolioRecovery} 個月`}
+                                ? '未復原 ⚠️' 
+                                : `${matchedMetric.portfolioRecovery}個月`}
                             </div>
                           </div>
-                          <div className="p-2.5 bg-slate-50 border border-slate-200/50 rounded-xl">
-                            <div className="text-[8px] font-bold text-slate-400">對照組復原時間</div>
-                            <div className="text-xs font-black text-slate-600 mt-1 font-mono">
+                          
+                          {matchedMetric.actualRecovery !== undefined && (
+                            <div className="p-2 bg-amber-50/50 border border-amber-100/50 rounded-xl flex flex-col justify-between">
+                              <div className="text-[7.5px] font-bold text-amber-500">真實持股復原</div>
+                              <div className="text-[10px] font-black text-amber-700 mt-0.5 font-mono">
+                                {matchedMetric.actualRecovery === -1 
+                                  ? '未復原 ⚠️' 
+                                  : `${matchedMetric.actualRecovery}個月`}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="p-2 bg-slate-50 border border-slate-200/50 rounded-xl flex flex-col justify-between">
+                            <div className="text-[7.5px] font-bold text-slate-400">對照組復原</div>
+                            <div className="text-[10px] font-black text-slate-600 mt-0.5 font-mono">
                               {matchedMetric.benchmarkRecovery === -1 
-                                ? '尚未復原 ⚠️' 
-                                : `${matchedMetric.benchmarkRecovery} 個月`}
+                                ? '未復原 ⚠️' 
+                                : `${matchedMetric.benchmarkRecovery}個月`}
                             </div>
                           </div>
                         </div>
 
                         {/* 亮點提示 */}
                         {matchedMetric.portfolioRecovery !== -1 && matchedMetric.benchmarkRecovery !== -1 && matchedMetric.portfolioRecovery < matchedMetric.benchmarkRecovery && (
-                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50 leading-relaxed">
                             <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                             資產多元配置比對照組提早 {matchedMetric.benchmarkRecovery - matchedMetric.portfolioRecovery} 個月回到前高！
                           </div>
