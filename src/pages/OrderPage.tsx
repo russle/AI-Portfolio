@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { AlertBanner } from '../components/AlertBanner';
-import { calculateExactRebalance, ASSET_MAP } from '../utils/rebalance';
+import { calculateExactRebalance, calculateCashOnlyRebalance, ASSET_MAP } from '../utils/rebalance';
 
 interface AssetOrderConfig {
   symbol: string;      // 標的代碼/名稱
@@ -23,13 +23,42 @@ export const OrderPage: React.FC = () => {
     cash: { symbol: '台幣現金存款', price: 1, currency: 'TWD' }
   });
 
+  // [NEW] 下單計算器相關狀態
+  const [newCash, setNewCash] = useState<number>(50000);
+  const [orderMode, setOrderMode] = useState<'cash_rebalance' | 'cash_fixed' | 'exact'>('cash_rebalance');
+
   // 美金匯率微調 (已全域化)
   const usdFxRate = portfolio.usdRate ?? 32.2;
 
-  // 2. 獲取精準再平衡的交易建議金額 (以 TWD 為單位)
-  const exactRebalanceData = useMemo(() => {
-    return calculateExactRebalance(portfolio, allocation_target);
-  }, [portfolio, allocation_target]);
+  // 2. 依模式動態計算大類配置調整差額
+  const currentRebalanceData = useMemo(() => {
+    if (orderMode === 'cash_rebalance') {
+      return calculateCashOnlyRebalance(portfolio, allocation_target, newCash);
+    } else if (orderMode === 'cash_fixed') {
+      // 軌道 2：新資金定比下單 (只買不賣)
+      const total = portfolio.cash + portfolio.fund + portfolio.tw_stock + portfolio.us_stock + portfolio.crypto;
+      return (Object.keys(ASSET_MAP) as Array<keyof typeof ASSET_MAP>).map(key => {
+        const mapping = ASSET_MAP[key];
+        const currentValue = portfolio[key];
+        const targetPercent = allocation_target[mapping.targetKey];
+        const currentPercent = total > 0 ? currentValue / total : 0;
+        const actionAmount = newCash * targetPercent;
+        
+        return {
+          assetKey: key,
+          displayName: mapping.name,
+          currentValue,
+          currentPercent,
+          targetPercent,
+          differencePercent: currentPercent - targetPercent,
+          actionAmount // 均為正數
+        };
+      });
+    } else {
+      // 軌道 3：精準雙向調整
+      return calculateExactRebalance(portfolio, allocation_target);
+    }
+  }, [portfolio, allocation_target, orderMode, newCash]);
 
   // 修改特定資產的單價或標的名稱
   const handleConfigChange = (key: string, field: keyof AssetOrderConfig, value: any) => {
@@ -44,7 +73,7 @@ export const OrderPage: React.FC = () => {
 
   // 3. 計算下單換算結果
   const orderResults = useMemo(() => {
-    return exactRebalanceData.map(item => {
+    return currentRebalanceData.map(item => {
       const config = orderConfigs[item.assetKey];
       const targetActionTwd = item.actionAmount; // 正數代表買，負數代表賣
       const isCash = item.assetKey === 'cash';
@@ -70,8 +99,7 @@ export const OrderPage: React.FC = () => {
           actualSpentTwd = absAction;
           remainderTwd = 0;
         } else {
-          // 股票與基金，我們以整數「股/份」來做計算 (如果是零股交易，也可以是整數)
-          // 買入或賣出整數股
+          // 股票與基金，我們以整數「股/份」來做計算
           shares = Math.floor(absAction / priceTwd);
           actualSpentTwd = shares * priceTwd;
           remainderTwd = absAction - actualSpentTwd;
@@ -96,9 +124,9 @@ export const OrderPage: React.FC = () => {
         remainderTwd
       };
     });
-  }, [exactRebalanceData, orderConfigs, usdFxRate]);
+  }, [currentRebalanceData, orderConfigs, usdFxRate]);
 
-  // 過濾出有需要交易的項目 (交易金額不為 0)
+  // 過濾出有需要交易的項目 (交易金額不為 0 且排除現金)
   const activeOrders = useMemo(() => {
     return orderResults.filter(o => Math.abs(o.actionAmount) >= 1 && o.assetKey !== 'cash');
   }, [orderResults]);
@@ -109,75 +137,140 @@ export const OrderPage: React.FC = () => {
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight">交易下單輔助換算 (Order Helper)</h1>
         <p className="text-slate-500 mt-2 text-sm leading-relaxed">
-          再平衡算出了台幣金額，但不知道該去券商下單幾股嗎？此頁面協助您輸入即時市價，自動將再平衡交易金額換算成對應的 **下單股數**，並精算剩餘零頭。
+          再平衡算出了台幣金額，但不知道該去券商下單幾股嗎？此頁面協助您切換不同入金與調整軌道，自動將再平衡交易金額換算成對應的 **下單股數**，並精算剩餘零頭。
         </p>
       </div>
 
       <AlertBanner
         type="success"
-        message="💡 下單提示：下單換算結果是基於您在「配置再平衡」中的「精準再平衡」試算差額。您可以在左側面板隨時微調目前市價與美金匯率，以獲得最精準的下單數據。"
+        message="💡 沙盒安全提示：本交易下單輔助器為 100% 唯讀模擬沙盒，計算結果不會覆寫與修改您的真實持有資產數據，請放心進行多種入金配置模擬！"
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         
-        {/* 左側：單價與匯率設定面板 */}
+        {/* 左側：模式與市價設定面板 */}
         <Card className="p-6 xl:col-span-1 space-y-6">
           <div>
-            <h3 className="font-bold text-slate-700 text-sm tracking-wide border-b border-slate-100 pb-3">市價與匯率微調</h3>
-            <p className="text-xs text-slate-400 mt-1">請手動填寫您打算交易的標的與最新即時報價：</p>
+            <h3 className="font-bold text-slate-700 text-sm tracking-wide border-b border-slate-100 pb-3">下單計算器控制台</h3>
+            <p className="text-xs text-slate-400 mt-1">請選擇您的下單交易軌道與投入資金：</p>
           </div>
 
-          {/* 匯率 */}
+          {/* 下單模式高級 Tabs */}
+          <div className="flex p-1 bg-slate-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setOrderMode('cash_rebalance')}
+              className={`flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${
+                orderMode === 'cash_rebalance'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ⚖️ 智慧再平衡入金
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderMode('cash_fixed')}
+              className={`flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${
+                orderMode === 'cash_fixed'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📈 新資金定比分配
+            </button>
+            <button
+              type="button"
+              onClick={() => setOrderMode('exact')}
+              className={`flex-1 py-2 text-[11px] font-black rounded-lg transition-all ${
+                orderMode === 'exact'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              🔄 雙向精準平衡
+            </button>
+          </div>
+
+          {/* 新增新資金輸入框 */}
+          {(orderMode === 'cash_rebalance' || orderMode === 'cash_fixed') && (
+            <div className="animate-fade-in space-y-2 p-3 bg-blue-50/50 rounded-xl border border-blue-100/50">
+              <label className="text-xs font-black text-blue-700 flex items-center gap-1">
+                💰 預計投入新資金 (TWD)
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  value={newCash}
+                  onChange={(e) => setNewCash(Math.max(0, parseFloat(e.target.value) || 0))}
+                  className="w-full pl-7 pr-3 py-2 border border-blue-200 rounded-lg text-sm font-black text-blue-800 bg-white focus:outline-none focus:border-blue-500"
+                  placeholder="請輸入欲投入金額"
+                  step="1000"
+                />
+                <span className="absolute left-2.5 top-2 text-sm font-bold text-blue-400">$</span>
+              </div>
+              <span className="text-[10px] text-blue-500 block leading-relaxed">
+                {orderMode === 'cash_rebalance'
+                  ? '💡 智慧模式：新資金將「只買不賣」優先填補當前低配最嚴重的部位，在不賣出現有資產的前提下漸進達成再平衡。'
+                  : '💡 定比模式：新資金將按您設定的目標權重定比分配，不考慮當前的實際偏離狀態。'}
+              </span>
+            </div>
+          )}
+
           <div>
-            <label className="text-xs font-bold text-slate-400 block mb-1">美金對台幣匯率 (USD/TWD)</label>
-            <input
-              type="number"
-              value={usdFxRate}
-              onChange={(e) => updateUsdRate(parseFloat(e.target.value) || 32)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-              step="0.05"
-            />
-          </div>
+            <h4 className="text-xs font-bold text-slate-400 block mb-3 uppercase tracking-wider">市價與匯率微調</h4>
+            <div className="space-y-4">
+              {/* 匯率 */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-400 block mb-1">美金對台幣匯率 (USD/TWD)</label>
+                <input
+                  type="number"
+                  value={usdFxRate}
+                  onChange={(e) => updateUsdRate(parseFloat(e.target.value) || 32)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                  step="0.05"
+                />
+              </div>
 
-          <div className="space-y-4">
-            {Object.keys(ASSET_MAP).map(key => {
-              if (key === 'cash') return null; // 現金不需要設定單價
-              const mapping = ASSET_MAP[key as keyof typeof ASSET_MAP];
-              const config = orderConfigs[key];
+              {Object.keys(ASSET_MAP).map(key => {
+                if (key === 'cash') return null; // 現金不需要設定單價
+                const mapping = ASSET_MAP[key as keyof typeof ASSET_MAP];
+                const config = orderConfigs[key];
 
-              return (
-                <div key={key} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
-                  <span className="text-[11px] font-bold text-slate-400 block">{mapping.name} 代表標的</span>
-                  <div className="grid grid-cols-1 gap-2">
-                    <input
-                      type="text"
-                      value={config.symbol}
-                      onChange={(e) => handleConfigChange(key, 'symbol', e.target.value)}
-                      className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white"
-                      placeholder="標代碼/名稱"
-                    />
-                    <div className="flex gap-2 items-center">
+                return (
+                  <div key={key} className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-2">
+                    <span className="text-[11px] font-bold text-slate-400 block">{mapping.name} 代表標的</span>
+                    <div className="grid grid-cols-1 gap-2">
                       <input
-                        type="number"
-                        value={config.price}
-                        onChange={(e) => handleConfigChange(key, 'price', parseFloat(e.target.value) || 0)}
-                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white"
-                        placeholder="每股單價"
-                        step="0.01"
+                        type="text"
+                        value={config.symbol}
+                        onChange={(e) => handleConfigChange(key, 'symbol', e.target.value)}
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 bg-white"
+                        placeholder="標代碼/名稱"
                       />
-                      <select
-                        value={config.currency}
-                        onChange={(e) => handleConfigChange(key, 'currency', e.target.value as any)}
-                        className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 bg-white focus:outline-none"
-                      >
-                        <option value="TWD">TWD</option>
-                        <option value="USD">USD</option>
-                      </select>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="number"
+                          value={config.price}
+                          onChange={(e) => handleConfigChange(key, 'price', parseFloat(e.target.value) || 0)}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 bg-white"
+                          placeholder="每股單價"
+                          step="0.01"
+                        />
+                        <select
+                          value={config.currency}
+                          onChange={(e) => handleConfigChange(key, 'currency', e.target.value as any)}
+                          className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 bg-white focus:outline-none"
+                        >
+                          <option value="TWD">TWD</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </Card>
 
@@ -185,7 +278,9 @@ export const OrderPage: React.FC = () => {
         <div className="xl:col-span-2 space-y-6">
           <Card className="overflow-hidden">
             <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h3 className="font-bold text-slate-700 text-sm tracking-wide">自動下單股數建議表</h3>
+              <h3 className="font-bold text-slate-700 text-sm tracking-wide">
+                自動下單股數建議表 ({orderMode === 'cash_rebalance' ? '智慧入金' : orderMode === 'cash_fixed' ? '新資金定比' : '精準平衡'})
+              </h3>
               <span className="text-xs text-slate-400">目前匯率：<span className="font-bold text-slate-600">1 USD = {usdFxRate} TWD</span></span>
             </div>
 
@@ -195,7 +290,7 @@ export const OrderPage: React.FC = () => {
                   <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase bg-slate-50/30">
                     <th className="px-6 py-4">資產大類</th>
                     <th className="px-6 py-4">對應標的</th>
-                    <th className="px-6 py-4 text-right">目標調整金額</th>
+                    <th className="px-6 py-4 text-right">目標分配/調整</th>
                     <th className="px-6 py-4 text-right">標的報價</th>
                     <th className="px-6 py-4 text-center">需交易股數</th>
                     <th className="px-6 py-4 text-right">實際交易值 (TWD)</th>
@@ -212,7 +307,9 @@ export const OrderPage: React.FC = () => {
                       return (
                         <tr key={item.assetKey} className="bg-slate-50/20 text-slate-400">
                           <td className="px-6 py-4 font-bold text-slate-500">{item.displayName}</td>
-                          <td className="px-6 py-4 text-xs italic">無須交易下單</td>
+                          <td className="px-6 py-4 text-xs italic">
+                            {orderMode !== 'exact' ? '注入儲蓄現金' : '無須交易下單'}
+                          </td>
                           <td className="px-6 py-4 text-right font-semibold">
                             {item.actionAmount > 0 ? '+' : ''}${Math.round(item.actionAmount).toLocaleString()}
                           </td>
@@ -280,7 +377,7 @@ export const OrderPage: React.FC = () => {
             <div className="space-y-4 text-xs text-slate-500 leading-relaxed">
               {activeOrders.length === 0 ? (
                 <div className="text-slate-400 font-semibold p-4 text-center border-2 border-dashed border-slate-100 rounded-xl">
-                  🎉 目前您的帳戶配置完美貼合目標，不需要進行任何下單交易！
+                  🎉 目前無須進行任何下單交易！
                 </div>
               ) : (
                 <ol className="list-decimal list-inside space-y-2">
@@ -290,13 +387,13 @@ export const OrderPage: React.FC = () => {
                     
                     return (
                       <li key={ord.assetKey} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                        第一步，前往您的
+                        前往您的
                         <span className="font-bold text-slate-700 mx-1">{ord.currency === 'USD' ? '海外券商/複委託' : '國內證券商'}</span>
                         ，對標的物
                         <span className="font-bold text-slate-700 mx-1">{ord.symbol}</span>
                         送出
                         <span className={`font-black mx-1 ${isBuy ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {isBuy ? '買入' : '賣出'} {absShares.toLocaleString()} {ord.assetKey === 'crypto' ? '單位' : '股'}
+                          {isBuy ? '買入' : '賣出'} {ord.assetKey === 'crypto' ? absShares.toFixed(4) : absShares.toLocaleString()} {ord.assetKey === 'crypto' ? '單位' : '股'}
                         </span>
                         的限價單或市價單。預估台幣成交價值為
                         <span className="font-bold text-slate-600 mx-1">${Math.round(Math.abs(ord.actualSpentTwd)).toLocaleString()} TWD</span>

@@ -9,6 +9,7 @@ export type PortfolioHistoryPoint = {
   tw_stock?: number;
   us_stock?: number;
   crypto?: number;
+  cumulative_investment?: number; // [NEW] 累計投入本金
 };
 
 export type HoldingItem = {
@@ -65,12 +66,13 @@ export interface AppContextProps {
   updatePortfolioAsset: (key: AssetClassKey, value: number) => void;
   updateAllocationTarget: (target: Partial<AllocationTarget>) => void;
   updateRetirementConfig: (key: keyof RetirementConfig, value: number) => void;
-  addHistoryPoint: (date: string, netWorth: number) => void;
+  addHistoryPoint: (date: string, netWorth: number, cumulativeInvestment?: number) => void;
   resetAll: () => void;
   importState: (newState: AiPortfolioState) => void;
   addGranularHistoryPoint: (
     date: string,
-    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
+    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number },
+    cumulativeInvestment?: number
   ) => void;
   deleteHistoryPoint: (date: string) => void;
   // [NEW] 持股管理 API
@@ -99,13 +101,13 @@ const DEFAULT_STATE: AiPortfolioState = {
     isHoldingMode: false,
     usdRate: 32.2,
     history: [
-      { date: '2025-11-22', net_worth: 800000, cash: 150000, fund: 100000, tw_stock: 250000, us_stock: 280000, crypto: 20000 },
-      { date: '2025-12-22', net_worth: 850000, cash: 160000, fund: 110000, tw_stock: 270000, us_stock: 290000, crypto: 20000 },
-      { date: '2026-01-22', net_worth: 890000, cash: 170000, fund: 120000, tw_stock: 280000, us_stock: 300000, crypto: 20000 },
-      { date: '2026-02-22', net_worth: 950000, cash: 180000, fund: 130000, tw_stock: 300000, us_stock: 310000, crypto: 30000 },
-      { date: '2026-03-22', net_worth: 1020000, cash: 190000, fund: 140000, tw_stock: 320000, us_stock: 340000, crypto: 30000 },
-      { date: '2026-04-22', net_worth: 1100000, cash: 195000, fund: 145000, tw_stock: 350000, us_stock: 380000, crypto: 30000 },
-      { date: '2026-05-22', net_worth: 1230000, cash: 200000, fund: 150000, tw_stock: 400000, us_stock: 450000, crypto: 30000 },
+      { date: '2025-11-22', net_worth: 800000, cash: 150000, fund: 100000, tw_stock: 250000, us_stock: 280000, crypto: 20000, cumulative_investment: 780000 },
+      { date: '2025-12-22', net_worth: 850000, cash: 160000, fund: 110000, tw_stock: 270000, us_stock: 290000, crypto: 20000, cumulative_investment: 800000 },
+      { date: '2026-01-22', net_worth: 890000, cash: 170000, fund: 120000, tw_stock: 280000, us_stock: 300000, crypto: 20000, cumulative_investment: 810000 },
+      { date: '2026-02-22', net_worth: 950000, cash: 180000, fund: 130000, tw_stock: 300000, us_stock: 310000, crypto: 30000, cumulative_investment: 830000 },
+      { date: '2026-03-22', net_worth: 1020000, cash: 190000, fund: 140000, tw_stock: 320000, us_stock: 340000, crypto: 30000, cumulative_investment: 850000 },
+      { date: '2026-04-22', net_worth: 1100000, cash: 195000, fund: 145000, tw_stock: 350000, us_stock: 380000, crypto: 30000, cumulative_investment: 870000 },
+      { date: '2026-05-22', net_worth: 1230000, cash: 200000, fund: 150000, tw_stock: 400000, us_stock: 450000, crypto: 30000, cumulative_investment: 890000 },
     ]
   },
   allocation_target: {
@@ -279,7 +281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
-  const addHistoryPoint = (date: string, netWorth: number) => {
+  const addHistoryPoint = (date: string, netWorth: number, cumulativeInvestment?: number) => {
     setState(prev => {
       const updatedHistory = [...prev.portfolio.history];
       const existIndex = updatedHistory.findIndex(p => p.date === date);
@@ -316,10 +318,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const detail = getProportionalDetail(netWorth);
 
+      const defaultInvest = (() => {
+        if (cumulativeInvestment !== undefined) return cumulativeInvestment;
+        // 尋找最接近該日期之前的點
+        const sortedBefore = [...updatedHistory]
+          .filter(p => p.date < date && p.cumulative_investment !== undefined)
+          .sort((a, b) => b.date.localeCompare(a.date));
+        if (sortedBefore.length > 0) return sortedBefore[0].cumulative_investment;
+        return netWorth;
+      })();
+
       const newPoint: PortfolioHistoryPoint = {
         date,
         net_worth: netWorth,
-        ...detail
+        ...detail,
+        cumulative_investment: defaultInvest
       };
 
       if (existIndex >= 0) {
@@ -657,7 +670,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addGranularHistoryPoint = (
     date: string,
-    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number }
+    detail: { cash: number; fund: number; tw_stock: number; us_stock: number; crypto: number },
+    cumulativeInvestment?: number
   ) => {
     setState(prev => {
       const updatedHistory = [...prev.portfolio.history];
@@ -665,10 +679,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       
       const netWorthSum = detail.cash + detail.fund + detail.tw_stock + detail.us_stock + detail.crypto;
       
+      const defaultInvest = (() => {
+        if (cumulativeInvestment !== undefined) return cumulativeInvestment;
+        // 尋找最接近該日期之前的點
+        const sortedBefore = [...updatedHistory]
+          .filter(p => p.date < date && p.cumulative_investment !== undefined)
+          .sort((a, b) => b.date.localeCompare(a.date));
+        if (sortedBefore.length > 0) return sortedBefore[0].cumulative_investment;
+        return netWorthSum;
+      })();
+
       const newPoint: PortfolioHistoryPoint = {
         date,
         net_worth: netWorthSum,
-        ...detail
+        ...detail,
+        cumulative_investment: defaultInvest
       };
 
       if (existIndex >= 0) {

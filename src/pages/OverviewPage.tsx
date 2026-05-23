@@ -83,7 +83,13 @@ export const OverviewPage: React.FC = () => {
   const [modalTwStock, setModalTwStock] = useState(0);
   const [modalUsStock, setModalUsStock] = useState(0);
   const [modalCrypto, setModalCrypto] = useState(0);
+  const [modalCumulativeInvestment, setModalCumulativeInvestment] = useState(0); // [NEW] 累計本金狀態
   const [modalMsg, setModalMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+  // 1. 淨資產計算
+  const totalNetWorth = useMemo(() => {
+    return calculateTotalPortfolioValue(portfolio);
+  }, [portfolio]);
 
   // 開啟 Modal（新增模式）並智慧預填
   const openSnapshotModal = () => {
@@ -97,6 +103,7 @@ export const OverviewPage: React.FC = () => {
     setModalTwStock(latestPoint?.tw_stock ?? portfolio.tw_stock ?? 0);
     setModalUsStock(latestPoint?.us_stock ?? portfolio.us_stock ?? 0);
     setModalCrypto(latestPoint?.crypto ?? portfolio.crypto ?? 0);
+    setModalCumulativeInvestment(latestPoint?.cumulative_investment ?? totalNetWorth ?? 0); // [NEW] 智慧預填本金
     setModalMsg(null);
     setIsModalOpen(true);
   };
@@ -110,6 +117,7 @@ export const OverviewPage: React.FC = () => {
     setModalTwStock(point.tw_stock ?? 0);
     setModalUsStock(point.us_stock ?? 0);
     setModalCrypto(point.crypto ?? 0);
+    setModalCumulativeInvestment(point.cumulative_investment ?? point.net_worth ?? 0); // [NEW] 載入編輯本金
     setModalMsg(null);
     setIsModalOpen(true);
   };
@@ -135,14 +143,14 @@ export const OverviewPage: React.FC = () => {
       }
     }
 
-    // 呼叫 Context 方法
+    // 呼叫 Context 方法，帶入累計本金
     addGranularHistoryPoint(modalDate, {
       cash: Math.round(modalCash),
       fund: Math.round(modalFund),
       tw_stock: Math.round(modalTwStock),
       us_stock: Math.round(modalUsStock),
       crypto: Math.round(modalCrypto)
-    });
+    }, modalCumulativeInvestment > 0 ? Math.round(modalCumulativeInvestment) : undefined);
 
     // 成功通知
     setBackupMsg({ 
@@ -155,10 +163,23 @@ export const OverviewPage: React.FC = () => {
     setTimeout(() => setBackupMsg(null), 4000);
   };
 
-  // 1. 淨資產計算
-  const totalNetWorth = useMemo(() => {
-    return calculateTotalPortfolioValue(portfolio);
-  }, [portfolio]);
+  // [NEW] 最新一期本金與盈餘精算
+  const latestHistoryPoint = useMemo(() => {
+    const history = portfolio.history;
+    return history.length > 0 ? history[history.length - 1] : null;
+  }, [portfolio.history]);
+
+  const latestCumulativeInvestment = useMemo(() => {
+    return latestHistoryPoint?.cumulative_investment ?? totalNetWorth;
+  }, [latestHistoryPoint, totalNetWorth]);
+
+  const totalProfitAmt = useMemo(() => {
+    return totalNetWorth - latestCumulativeInvestment;
+  }, [totalNetWorth, latestCumulativeInvestment]);
+
+  const totalRoi = useMemo(() => {
+    return latestCumulativeInvestment > 0 ? (totalProfitAmt / latestCumulativeInvestment) * 100 : 0;
+  }, [totalProfitAmt, latestCumulativeInvestment]);
 
   // 1.5 帶有 MoM 環比的歷史快照數組 (最新在最前)
   const sortedHistoryWithMoM = useMemo(() => {
@@ -171,23 +192,21 @@ export const OverviewPage: React.FC = () => {
         momAmount = point.net_worth - prevPoint.net_worth;
         momPercent = prevPoint.net_worth > 0 ? (momAmount / prevPoint.net_worth) * 100 : 0;
       }
+
+      // [NEW] 損益與本金計算
+      const cumulativeInvestment = point.cumulative_investment ?? point.net_worth;
+      const totalProfit = point.net_worth - cumulativeInvestment;
+      const roi = cumulativeInvestment > 0 ? (totalProfit / cumulativeInvestment) * 100 : 0;
+
       return {
         ...point,
         momAmount,
-        momPercent
+        momPercent,
+        cumulativeInvestment,
+        totalProfit,
+        roi
       };
     });
-  }, [portfolio.history]);
-
-  // 2. 月增減計算 (與 history 倒數第二筆比對)
-  const monthlyChange = useMemo(() => {
-    const history = portfolio.history;
-    if (history.length < 2) return { amount: 0, percent: 0 };
-    const latest = history[history.length - 1].net_worth;
-    const prev = history[history.length - 2].net_worth;
-    const amount = latest - prev;
-    const percent = prev > 0 ? (amount / prev) * 100 : 0;
-    return { amount, percent };
   }, [portfolio.history]);
 
   // 3. 年化報酬率 (CAGR 粗略估算)
@@ -316,10 +335,10 @@ export const OverviewPage: React.FC = () => {
   return (
     <div className="space-y-8 animate-fade-in duration-300">
       
-      {/* 財務摘要列 (Overview Bar) */}
+      {/* 財務摘要列 (Overview Bar) 五卡片升級版 */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 select-none">
         
-        {/* 淨資產 */}
+        {/* 1. 最新淨資產 */}
         <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-blue-500">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">最新淨資產 (TWD)</span>
           <span className="text-2xl font-black text-slate-800 tracking-tight mt-1">
@@ -335,37 +354,46 @@ export const OverviewPage: React.FC = () => {
           </div>
         </Card>
 
-        {/* 月增減 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-emerald-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">本月資產增減</span>
-          <div className="flex items-baseline gap-1.5 mt-1">
-            <span className={`text-2xl font-black tracking-tight ${monthlyChange.amount >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {monthlyChange.amount >= 0 ? '+' : ''}${monthlyChange.amount.toLocaleString()}
-            </span>
-            <span className={`text-xs font-bold flex items-center ${monthlyChange.amount >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {monthlyChange.amount >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-              {monthlyChange.percent.toFixed(1)}%
-            </span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">與上一次淨值歷史比較</span>
+        {/* 2. 累計投入本金 */}
+        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-slate-400">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計投入本金 (TWD)</span>
+          <span className="text-2xl font-black text-slate-700 tracking-tight mt-1">
+            ${latestCumulativeInvestment.toLocaleString()}
+          </span>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">每月歷史月誌累計儲蓄</span>
         </Card>
 
-        {/* 年化報酬率 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-indigo-500">
+        {/* 3. 累計投資損益 & ROI */}
+        <Card hoverEffect={false} className={`flex flex-col justify-center border-l-4 ${totalProfitAmt >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500'}`}>
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計損益與總報酬</span>
+          <div className="flex items-baseline gap-1.5 mt-1">
+            <span className={`text-2xl font-black tracking-tight ${totalProfitAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {totalProfitAmt >= 0 ? '+' : ''}${totalProfitAmt.toLocaleString()}
+            </span>
+            <span className={`text-xs font-bold flex items-center ${totalProfitAmt >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+              {totalProfitAmt >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+              {totalRoi.toFixed(1)}%
+            </span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">市值相較本金的複利剪刀差</span>
+        </Card>
+
+        {/* 4. 年化報酬率 */}
+        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-purple-500">
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">CAGR 歷史年化報酬</span>
-          <span className="text-2xl font-black text-indigo-600 tracking-tight mt-1">
+          <span className="text-2xl font-black text-purple-600 tracking-tight mt-1">
             {(cagrReturn * 100).toFixed(1)}%
           </span>
           <span className="text-[10px] text-slate-400 font-bold mt-1">由歷史首尾淨值點幾何精算</span>
         </Card>
 
-        {/* FIRE 進度 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center lg:col-span-2 border-l-4 border-l-teal-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">FIRE 目標進度</span>
+        {/* 5. FIRE 進度 */}
+        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-teal-500">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">FIRE 目標進度 ({firePercent.toFixed(1)}%)</span>
           <div className="mt-2.5">
-            <ProgressBar value={firePercent} showText={true} />
+            <ProgressBar value={firePercent} showText={false} />
           </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">目標資產：${fireTarget.toLocaleString()} 元</span>
+          <span className="text-[10px] text-slate-400 font-bold mt-1">目標：${fireTarget.toLocaleString()} 元</span>
         </Card>
 
       </div>
@@ -385,7 +413,7 @@ export const OverviewPage: React.FC = () => {
               <div>
                 <h2 className="text-base font-bold text-slate-800">資產歷史趨勢</h2>
                 <p className="text-xs font-semibold text-slate-400">
-                  {chartView === 'line' ? '展示最近歷史記點的本金與複利累積實況' : '細分資產在各個歷史快照的消長結構'}
+                  {chartView === 'line' ? '展示最近歷史記點的本金與複利累積實況 (藍市值 vs 橙本金)' : '細分資產在各個歷史快照的消長結構'}
                 </p>
               </div>
               
@@ -409,7 +437,7 @@ export const OverviewPage: React.FC = () => {
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    📈 淨資產趨勢
+                    📈 本金與市值對照
                   </button>
                   <button
                     onClick={() => setChartView('stacked')}
@@ -419,7 +447,7 @@ export const OverviewPage: React.FC = () => {
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
-                    📊 資產消長
+                    📊 資產消長堆疊
                   </button>
                 </div>
                 
@@ -434,7 +462,10 @@ export const OverviewPage: React.FC = () => {
                 <LineChart 
                   data={portfolio.history} 
                   xKey="date" 
-                  lines={[{ key: 'net_worth', name: '淨資產淨值', stroke: '#3b82f6' }]} 
+                  lines={[
+                    { key: 'net_worth', name: '資產總市值', stroke: '#3b82f6' },
+                    { key: 'cumulative_investment', name: '累計投入本金', stroke: '#f59e0b' }
+                  ]} 
                 />
               ) : (
                 <StackedAreaChart 
@@ -554,11 +585,12 @@ export const OverviewPage: React.FC = () => {
           </div>
         ) : (
           <div className="overflow-x-auto -mx-6 px-6">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[850px]">
               <thead>
                 <tr className="border-b border-slate-200/60 text-[10px] font-black text-slate-400 uppercase tracking-wider select-none">
                   <th className="pb-3 font-black">月份 / 日期</th>
                   <th className="pb-3 font-black">總淨資產 (TWD)</th>
+                  <th className="pb-3 font-black">累計本金 / 累計損益</th>
                   <th className="pb-3 font-black">MoM 環比變化</th>
                   <th className="pb-3 font-black">細分資產配置 (大於 $0 標的)</th>
                   <th className="pb-3 text-right font-black">操作項目</th>
@@ -570,6 +602,14 @@ export const OverviewPage: React.FC = () => {
                     <td className="py-4 font-bold text-slate-800">{point.date}</td>
                     <td className="py-4 font-extrabold text-slate-900">
                       ${point.net_worth.toLocaleString()}
+                    </td>
+                    <td className="py-4">
+                      <div className="font-extrabold text-slate-700">
+                        ${point.cumulativeInvestment.toLocaleString()}
+                      </div>
+                      <div className={`text-[10px] font-black mt-0.5 ${point.totalProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {point.totalProfit >= 0 ? '盈 +' : '虧 '}${point.totalProfit.toLocaleString()} ({point.roi.toFixed(1)}%)
+                      </div>
                     </td>
                     <td className="py-4">
                       {point.momAmount !== 0 || sortedHistoryWithMoM.indexOf(point) < sortedHistoryWithMoM.length - 1 ? (
@@ -841,6 +881,16 @@ export const OverviewPage: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
+                <div className="col-span-2 animate-fade-in">
+                  <label className="block text-[10px] font-black text-blue-500 uppercase tracking-wider mb-1">💰 累計投入本金 (TWD，選填)</label>
+                  <input
+                    type="number"
+                    value={modalCumulativeInvestment || ''}
+                    onChange={(e) => setModalCumulativeInvestment(Number(e.target.value))}
+                    placeholder="用於精算您的本金與複利市值剪刀差"
+                    className="w-full px-3 py-2 bg-blue-50/30 border border-blue-200 rounded-xl text-xs font-bold text-blue-700 focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
               </div>
 
               {/* 智慧預填與防禦說明 */}
@@ -848,6 +898,7 @@ export const OverviewPage: React.FC = () => {
                 <p className="font-bold text-slate-600">💡 系統智慧快照邏輯：</p>
                 <ul className="list-disc pl-3.5 space-y-0.5 font-semibold">
                   <li>智慧預填：自動套用上一期歷史快照做為預填底稿。</li>
+                  <li>本金對比：選填的累計本金將在首頁生成橙色的累計本金虛線，與藍色市值進行對照。</li>
                   <li>最新同步：補記今天或新日期，會同步更新當前實際資產。</li>
                   <li>漏帳不污染：補記過去歷史漏帳時，僅寫入 history，不污染當前資產現值。</li>
                 </ul>

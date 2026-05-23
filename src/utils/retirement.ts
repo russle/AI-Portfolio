@@ -308,3 +308,161 @@ export const runFullLifeMonteCarloSimulation = (
     depletionAgeP95
   };
 };
+
+// [NEW] 歷史黑天鵝危機大類年度收益矩陣 (10年)
+const CRISIS_YEARLY_RETURNS: Record<
+  'tech_2000' | 'financial_2008' | 'inflation_2022',
+  {
+    tw_stock: number[];
+    us_stock: number[];
+    bond: number[];
+    crypto: number[];
+    cash: number[];
+  }
+> = {
+  tech_2000: {
+    // 2000-2009
+    tw_stock: [-0.44, 0.18, -0.20, 0.35, 0.05, 0.07, 0.22, 0.12, -0.43, 0.74],
+    us_stock: [-0.09, -0.12, -0.22, 0.28, 0.10, 0.05, 0.15, 0.05, -0.37, 0.26],
+    bond: [0.11, 0.08, 0.10, 0.04, 0.04, 0.02, 0.04, 0.07, 0.07, 0.06],
+    crypto: [0.05, 0.15, 0.15, 0.05, 0.02, 0.05, 0.10, 0.05, -0.10, 0.15], // 當時無加密幣，以黃金/避險回報替代
+    cash: [0.05, 0.04, 0.02, 0.015, 0.015, 0.03, 0.045, 0.045, 0.02, 0.005]
+  },
+  financial_2008: {
+    // 2008-2017
+    tw_stock: [-0.43, 0.74, 0.18, -0.18, 0.10, 0.12, 0.15, -0.06, 0.19, 0.18],
+    us_stock: [-0.37, 0.26, 0.15, 0.02, 0.16, 0.32, 0.13, 0.01, 0.12, 0.21],
+    bond: [0.07, 0.06, 0.06, 0.08, 0.04, -0.02, 0.06, 0.005, 0.026, 0.035],
+    crypto: [0.05, 0.20, 0.30, 0.10, 0.15, 0.20, -0.10, 0.08, 0.12, 0.25], // 避險/大宗替代
+    cash: [0.02, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.01]
+  },
+  inflation_2022: {
+    // 2022-2031 (包含 2022-2024 真實數據與後續預期數據)
+    tw_stock: [-0.22, 0.26, 0.30, 0.10, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07],
+    us_stock: [-0.19, 0.24, 0.25, 0.09, 0.08, 0.08, 0.07, 0.07, 0.07, 0.07],
+    bond: [-0.13, 0.05, 0.06, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04],
+    crypto: [-0.64, 1.50, 0.60, 0.15, 0.10, -0.20, 0.30, 0.10, 0.15, 0.10],
+    cash: [0.02, 0.04, 0.045, 0.035, 0.03, 0.025, 0.02, 0.02, 0.02, 0.02]
+  }
+};
+
+export interface CrisisBacktestPoint {
+  month: number;
+  yearNum: number;
+  assetValue: number;
+  spentValue: number;
+}
+
+export interface CrisisBacktestResult {
+  history: CrisisBacktestPoint[];
+  isDepleted: boolean;
+  depletionMonth: number | null;
+  finalAsset: number;
+}
+
+/**
+ * [NEW] 實作歷史黑天鵝危機提領存活回測引擎 (唯讀沙盒)
+ */
+export const runRetirementCrisisBacktest = (
+  initialAsset: number,
+  monthlySpending: number,
+  allocation: { tw_stock: number; us_stock: number; bond: number; cash: number; crypto: number },
+  enableGk: boolean,
+  enableSpendingSmile: boolean,
+  scenarioId: 'tech_2000' | 'financial_2008' | 'inflation_2022',
+  inflation: number
+): CrisisBacktestResult => {
+  const returns = CRISIS_YEARLY_RETURNS[scenarioId];
+  const history: CrisisBacktestPoint[] = [{ month: 0, yearNum: 0, assetValue: initialAsset, spentValue: monthlySpending }];
+  
+  let currentAsset = initialAsset;
+  let hasDepleted = false;
+  let depletionMonth: number | null = null;
+  
+  // GK 動態提領護欄判定基準
+  const yearlySpending = monthlySpending * 12;
+  const gkTarget = yearlySpending / 0.05;
+
+  // 10年 (120個月)
+  const totalMonths = 120;
+
+  for (let m = 1; m <= totalMonths; m++) {
+    if (currentAsset <= 0) {
+      if (!hasDepleted) {
+        hasDepleted = true;
+        depletionMonth = m - 1;
+      }
+      currentAsset = 0;
+      history.push({
+        month: m,
+        yearNum: Math.ceil(m / 12),
+        assetValue: 0,
+        spentValue: 0
+      });
+      continue;
+    }
+
+    const yearIndex = Math.floor((m - 1) / 12); // 0 ~ 9 年
+    
+    // 計算該月的資產回報率 (年收益率均攤為月收益率)
+    const getMonthlyReturn = (yearlyRet: number) => {
+      return Math.pow(1 + yearlyRet, 1 / 12) - 1;
+    };
+
+    const monthlyTw = getMonthlyReturn(returns.tw_stock[yearIndex]);
+    const monthlyUs = getMonthlyReturn(returns.us_stock[yearIndex]);
+    const monthlyBond = getMonthlyReturn(returns.bond[yearIndex]);
+    const monthlyCrypto = getMonthlyReturn(returns.crypto[yearIndex]);
+    const monthlyCash = getMonthlyReturn(returns.cash[yearIndex]);
+
+    // 依配置比例算出該月投資組合的加權報酬率
+    const portfolioReturn =
+      allocation.tw_stock * monthlyTw +
+      allocation.us_stock * monthlyUs +
+      allocation.bond * monthlyBond +
+      allocation.crypto * monthlyCrypto +
+      allocation.cash * monthlyCash;
+
+    // 計算本期提領支出 (隨通膨逐月滾增)
+    let currentSpending = monthlySpending * Math.pow(1 + inflation / 12, m);
+
+    // A. 支出微笑曲線 (假設提領期第 1 至 10 年，年齡為 60 至 70 歲，微笑折減尚未完全顯現，但在回測中依然支援)
+    if (enableSpendingSmile) {
+      const simulatedAge = 60 + yearIndex;
+      let smileFactor = 1.0;
+      if (simulatedAge > 70) {
+        smileFactor = 1.0 - (simulatedAge - 70) * 0.025;
+      }
+      currentSpending *= smileFactor;
+    }
+
+    // B. GK 動態提領護欄
+    if (enableGk) {
+      if (currentAsset >= gkTarget * 1.2) {
+        currentSpending *= 1.1; // 富裕增領
+      } else if (currentAsset <= gkTarget * 0.8) {
+        currentSpending *= 0.9; // 防禦減領
+      }
+    }
+
+    // 扣除本月提領額 (期初提領)
+    currentAsset = Math.max(0, currentAsset - currentSpending);
+
+    // 滾存本月加權報酬率 (期末增值)
+    currentAsset = currentAsset * (1 + portfolioReturn);
+
+    history.push({
+      month: m,
+      yearNum: Math.ceil(m / 12),
+      assetValue: Math.round(currentAsset),
+      spentValue: Math.round(currentSpending)
+    });
+  }
+
+  return {
+    history,
+    isDepleted: hasDepleted,
+    depletionMonth,
+    finalAsset: Math.round(currentAsset)
+  };
+};

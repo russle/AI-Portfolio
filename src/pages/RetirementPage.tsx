@@ -4,7 +4,12 @@ import { Card } from '../components/Card';
 import { Gauge } from '../components/Gauge';
 import { LineChart } from '../components/LineChart';
 import { AlertBanner } from '../components/AlertBanner';
-import { runMonteCarloSimulation as runMonteCarlo, assessRetirementFeasibility as assessFeasibility, runFullLifeMonteCarloSimulation } from '../utils/retirement';
+import { 
+  runMonteCarloSimulation as runMonteCarlo, 
+  assessRetirementFeasibility as assessFeasibility, 
+  runFullLifeMonteCarloSimulation,
+  runRetirementCrisisBacktest // [NEW] 引入危機回測
+} from '../utils/retirement';
 import { calculateSpendingForDieToZero } from '../utils/formulas';
 import { AlertTriangle } from 'lucide-react';
 
@@ -16,8 +21,11 @@ export const RetirementPage: React.FC = () => {
   const [targetRetirementAge, setTargetRetirementAge] = useState<number>(60);
   const [withdrawalRule, setWithdrawalRule] = useState<'four_percent' | 'gk_dynamic' | 'die_to_zero' | 'cape_based'>('four_percent');
 
+  // [NEW] 歷史黑天鵝回測狀態
+  const [crisisScenario, setCrisisScenario] = useState<'tech_2000' | 'financial_2008' | 'inflation_2022'>('financial_2008');
+
   // 全球股市說明：股債配置是以全球股市來估算
-  const globalMarketNote = "本系統之股債配置預估報酬率，是以全球股市（例如 MSCI ACWI 指數）及全球債券市場之長期歷史年化回報率為估算基礎。全球股市在過去數十年間的年化回報率約為 7%~8%，投資組合會依據您的股債比例調和出對應的預期報酬率。";
+  const globalMarketNote = "本系統之股債配置預估報酬率，是以全球股市（例如 MSCI ACWI 指數）及全球債券 market 之長期歷史年化回報率為估算基礎。全球股市在過去數十年間的年化回報率約為 7%~8%，投資組合會依據您的股債比例調和出對應的預期報酬率。";
 
   // 計算目前資產總額
   const currentAsset = useMemo(() => {
@@ -75,7 +83,7 @@ export const RetirementPage: React.FC = () => {
     const strategy = withdrawalRule === 'four_percent' ? 'four_percent' :
                      withdrawalRule === 'gk_dynamic' ? 'gk_dynamic' :
                      withdrawalRule === 'cape_based' ? 'cape_based' : 'die_to_zero';
-                     
+                      
     return runFullLifeMonteCarloSimulation(
       currentAsset,
       retirement.monthly_invest,
@@ -160,6 +168,56 @@ export const RetirementPage: React.FC = () => {
       remainingYears
     };
   }, [fullLifeResult, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, retirement.life_expectancy]);
+
+  // [NEW] 歷史黑天鵝危機回測計算
+  const totalAssetVal = currentAsset || 1;
+  const currentWeight = useMemo(() => {
+    return {
+      tw_stock: portfolio.tw_stock / totalAssetVal,
+      us_stock: portfolio.us_stock / totalAssetVal,
+      bond: portfolio.fund / totalAssetVal,
+      cash: portfolio.cash / totalAssetVal,
+      crypto: portfolio.crypto / totalAssetVal
+    };
+  }, [portfolio, totalAssetVal]);
+
+  const allocationToUse = useMemo(() => {
+    if (currentAsset > 0) {
+      return currentWeight;
+    }
+    return {
+      tw_stock: state.allocation_target.tw_stock,
+      us_stock: state.allocation_target.us_stock,
+      bond: state.allocation_target.bond,
+      cash: state.allocation_target.cash,
+      crypto: state.allocation_target.crypto
+    };
+  }, [currentAsset, currentWeight, state.allocation_target]);
+
+  const crisisResult = useMemo(() => {
+    const initialAssetToUse = currentAsset > 0 ? currentAsset : 10000000;
+    return runRetirementCrisisBacktest(
+      initialAssetToUse,
+      retirement.monthly_spending,
+      allocationToUse,
+      withdrawalRule === 'gk_dynamic',
+      retirement.spending_smile ?? false,
+      crisisScenario,
+      retirement.inflation
+    );
+  }, [currentAsset, retirement.monthly_spending, allocationToUse, withdrawalRule, retirement.spending_smile, crisisScenario, retirement.inflation]);
+
+  const crisisChartData = useMemo(() => {
+    return crisisResult.history.map(point => ({
+      month: `${point.month}月`,
+      assetValue: point.assetValue,
+      spentValue: point.spentValue
+    }));
+  }, [crisisResult]);
+
+  const crisisLinesConfig = [
+    { key: 'assetValue', name: '退休金餘額 (TWD)', stroke: '#ef4444' }
+  ];
 
   const linesConfig = [
     { key: 'p95', name: '樂觀上限 (P95)', stroke: '#10b981' },
@@ -689,6 +747,134 @@ export const RetirementPage: React.FC = () => {
               })}
             </tbody>
           </table>
+        </div>
+      </Card>
+
+      {/* 🦖 [NEW] 歷史黑天鵝退休生存實測沙盒 */}
+      <Card className="p-6">
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6 border-b border-slate-100 pb-4 select-none">
+          <div>
+            <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+              🦖 歷史黑天鵝極端生存實測沙盒 (Crisis Backtest)
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              將退休組合帶入真實的歷史慘烈股災，壓力測試在每月剛性提領下能否存活 (唯讀沙盒)
+            </p>
+          </div>
+          <div className="bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 flex text-[10px] font-black">
+            <button
+              onClick={() => setCrisisScenario('tech_2000')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                crisisScenario === 'tech_2000'
+                  ? 'bg-white text-rose-600 shadow-sm border border-slate-200/20'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              ☄️ 2000 科技股破滅
+            </button>
+            <button
+              onClick={() => setCrisisScenario('financial_2008')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                crisisScenario === 'financial_2008'
+                  ? 'bg-white text-rose-600 shadow-sm border border-slate-200/20'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              🌊 2008 全球金融海嘯
+            </button>
+            <button
+              onClick={() => setCrisisScenario('inflation_2022')}
+              className={`px-3 py-1.5 rounded-lg transition-all ${
+                crisisScenario === 'inflation_2022'
+                  ? 'bg-white text-rose-600 shadow-sm border border-slate-200/20'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              🔥 2022 股債雙殺高通膨
+            </button>
+          </div>
+        </div>
+
+        {/* 沙盒配置說明 */}
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-6 items-stretch">
+          <div className="xl:col-span-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl flex flex-col justify-between">
+            <div className="space-y-4">
+              <span className="text-[10px] font-black text-rose-600 bg-rose-50 border border-rose-100 px-2 py-0.5 rounded uppercase tracking-wider block w-fit">
+                壓力測試規格
+              </span>
+              
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-400 font-bold">初始退休金：</span>
+                  <span className="text-slate-700 font-extrabold">
+                    ${(currentAsset > 0 ? currentAsset : 10000000).toLocaleString()} TWD
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-400 font-bold">月提領支出：</span>
+                  <span className="text-slate-700 font-extrabold">
+                    ${retirement.monthly_spending.toLocaleString()} TWD/月
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-400 font-bold">配置組合：</span>
+                  <span className="text-blue-600 font-black">
+                    {currentAsset > 0 ? '當前實際持股佔比' : '目標配置比例'}
+                  </span>
+                </div>
+                <div className="flex justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-slate-400 font-bold">提領規則：</span>
+                  <span className="text-slate-700 font-extrabold">{ruleDescription.title}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-bold">通膨保護：</span>
+                  <span className="text-emerald-600 font-black">開啟 (逐月調整)</span>
+                </div>
+              </div>
+
+              {currentAsset === 0 && (
+                <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl text-[9px] font-semibold text-blue-600 leading-normal">
+                  💡 提示：偵測到您目前無真實持股，系統自動啟用「目標配置比例」並以 $1,000 萬 TWD 初始金為您進行 10 年危機生存回測。
+                </div>
+              )}
+            </div>
+
+            {/* 生存診斷報告 */}
+            <div className="mt-6 pt-4 border-t border-slate-200">
+              <span className="text-[10px] font-black text-slate-400 block mb-2 tracking-wider">測試生存診斷報告</span>
+              {crisisResult.isDepleted ? (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 space-y-1.5">
+                  <h4 className="text-xs font-black flex items-center gap-1">❌ 退休金已消耗枯竭！</h4>
+                  <p className="text-[10px] leading-relaxed font-bold">
+                    在該危機衝擊下，您的退休金於第 <span className="font-extrabold text-sm">{crisisResult.depletionMonth}</span> 個月 (約第 {Math.ceil((crisisResult.depletionMonth ?? 0)/12)} 年) 宣告歸零，無法安全熬過 10 年考驗！
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-emerald-50 border border-emerald-250 rounded-xl text-emerald-700 space-y-1.5">
+                  <h4 className="text-xs font-black flex items-center gap-1">🎉 成功熬過危機考驗！</h4>
+                  <p className="text-[10px] leading-relaxed font-bold">
+                    您的配置成功抵禦了黑天鵝打擊！歷經 10 年提領，最終仍保有 <span className="font-extrabold text-xs">${crisisResult.finalAsset.toLocaleString()} TWD</span> 的穩健資產餘額！
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 危機折線圖 */}
+          <div className="xl:col-span-3 h-80 min-h-[300px]">
+            <LineChart 
+              data={crisisChartData} 
+              xKey="month" 
+              lines={crisisLinesConfig} 
+              height={320}
+              formatYAxis={(val) => {
+                if (val >= 10000) {
+                  return `$${Math.round(val / 10000)}萬`;
+                }
+                return `$${val}`;
+              }}
+            />
+          </div>
         </div>
       </Card>
     </div>
