@@ -269,6 +269,19 @@ $$\text{幾何年化報酬率 (CAGR)} = \left( (1 + \bar{R}_m)^{12} - 1 \right) 
   $$\text{Max Drop} = \frac{V_{min} - V_{peak}}{V_{peak}} \times 100\%$$
 * **復原月數 (Recovery Months)**：自高峰月 $t_{peak}$ 開始，往後尋找第一個淨值重新大於或等於高峰期淨值 $V_{peak}$ 的月份 $t_{recover}$，復原月數為 $t_{recover} - t_{peak}$；若至回測時間軸終點仍未回到前高，則記為 `尚未復原 (-1)`。
 
+#### 5. 當前真實持股三方地獄大對決回測規格 (3-Way Actual Holdings Backtest Specs) [NEW]
+為了對抗真實個股歷史數據不足 10 年造成的技術性報錯，引擎實作了宏觀的「大類資產權重映射法」，並在 UI 上擴展為三線大對決：
+* **大類比例歸一化 (Holdings Normalization)**：設真實持股所有標的折算新台幣的現值加上剩餘現金總額為 $V_{actual}$：
+  $$W_{actual, i} = \frac{\text{真實持股}_i \text{ 折合 TWD 市值}}{V_{actual}}$$
+  得出歸一化的實際大類比例。
+* **真實組合走勢演算 (Actual Portfolio Evolution)**：將這套 $W_{actual}$ 作為靜態權重，套用至 `0050.TW`、`VT`、`BND`、`BTC-USD` 歷史月價格上，跑出長線滾存與再平衡本利和走勢：
+  $$V_{actual}(t) = \sum_{i=1}^M Shares_{actual, i}(t) \times P_i(t) + Cash_{actual}(t)$$
+  其中 $Shares_{actual, i}$ 與 $Cash_{actual}$ 依照實際權重 $W_{actual, i}$ 進行每月定期定額買入與再平衡。
+* **三方地獄大對決 UI/UX 規範**：
+  - **動態雙軌 Recharts 渲染**：若未啟用持股模式或持股為空，真實持股 Area 折線（琥珀橙，#f59e0b）與 Legend 標籤自動隱藏。若啟用，橙色線流暢淡入，Legend 與 Tooltip 擴展為三線格式。
+  - **三欄指標發光卡片**：最終金額、CAGR、最大回撤與夏普值由雙欄對比升級為三欄式面板。
+  - **三方對決進度條與危機卡片**：下方三大重大危機進度條與復原時間面板升級為「目標配置 vs 當前真實配置 vs 100% 台股」的三進度條地獄對決，最大跌幅與復原月同步精算。
+
 ---
 
 ## 5. UI/UX 視覺美學與高品質組件規範
