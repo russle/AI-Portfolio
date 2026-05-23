@@ -30,7 +30,8 @@ export type Portfolio = {
   crypto: number;
   holdings?: HoldingItem[];    // [NEW] 持股明細
   isHoldingMode?: boolean;     // [NEW] 是否啟用持股模式
-  usdRate?: number;            // [NEW] 美元匯率
+  usdRate?: number;            // 美元匯率
+  fxLastUpdated?: string;      // [NEW] 匯率最後自動同步時間 (ISO)
   history: PortfolioHistoryPoint[];
 };
 
@@ -81,7 +82,8 @@ export interface AppContextProps {
   deleteHolding: (id: string) => void;
   updateHolding: (id: string, updates: Partial<HoldingItem>) => void;
   refreshAllPrices: (usdRate?: number) => Promise<boolean>;
-  updateUsdRate: (rate: number) => void; // [NEW] 更新匯率
+  updateUsdRate: (rate: number) => void;
+  refreshUsdRate: () => Promise<boolean>; // [NEW] 手動觸發匯率自動同步
 }
 
 const LOCAL_STORAGE_KEY = 'aiPortfolio';
@@ -197,6 +199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             holdings: portfolio.holdings || [],
             isHoldingMode: portfolio.isHoldingMode || false,
             usdRate: portfolio.usdRate !== undefined ? portfolio.usdRate : DEFAULT_STATE.portfolio.usdRate,
+            fxLastUpdated: portfolio.fxLastUpdated,
             history: migratedHistory
           },
           allocation_target: {
@@ -594,7 +597,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setState(prev => {
       const updatedPortfolio = {
         ...prev.portfolio,
-        usdRate: rate
+        usdRate: rate,
+        fxLastUpdated: new Date().toISOString()  // 記錄同步時間
       };
 
       if (prev.portfolio.isHoldingMode) {
@@ -654,7 +658,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const rate = await fetchLatestPrice('USDTWD=X');
         if (rate !== null && rate > 20 && rate < 50) {
           console.log(`[FX Auto Fetch] Successfully loaded USD rate from Yahoo Finance: ${rate}`);
-          updateUsdRate(rate);
+          updateUsdRate(rate);  // updateUsdRate 內部已自動寫入 fxLastUpdated
         } else {
           console.warn(`[FX Auto Fetch] API returned invalid or no rate: ${rate}. Using fallback.`);
         }
@@ -742,6 +746,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
+  // [NEW] 手動觸發匯率同步（可被 UI 按鈕呼叫）
+  const refreshUsdRate = async (): Promise<boolean> => {
+    try {
+      const rate = await fetchLatestPrice('USDTWD=X');
+      if (rate !== null && rate > 20 && rate < 50) {
+        updateUsdRate(rate);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
   return (
     <AppContext.Provider
       value={{
@@ -759,7 +777,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteHolding,
         updateHolding,
         refreshAllPrices,
-        updateUsdRate
+        updateUsdRate,
+        refreshUsdRate
       }}
     >
       {children}

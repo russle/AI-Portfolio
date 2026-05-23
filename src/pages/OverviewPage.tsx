@@ -75,12 +75,13 @@ const validateImportedState = (data: any): boolean => {
 };
 
 export const OverviewPage: React.FC = () => {
-  const { state, importState, addGranularHistoryPoint, deleteHistoryPoint } = useApp();
+  const { state, importState, addGranularHistoryPoint, deleteHistoryPoint, refreshUsdRate } = useApp();
   const navigate = useNavigate();
   const { portfolio, allocation_target, retirement } = state;
 
   const [chartView, setChartView] = useState<'line' | 'stacked'>('line');
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+  const [isFxRefreshing, setIsFxRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 補記與編輯快照相關 State
@@ -350,11 +351,25 @@ export const OverviewPage: React.FC = () => {
     event.target.value = '';
   };
 
+  // [NEW] 半體頭指標：USD/TWD 区块手動同步處理
+  const handleRefreshFx = async () => {
+    if (isFxRefreshing) return;
+    setIsFxRefreshing(true);
+    const success = await refreshUsdRate();
+    setIsFxRefreshing(false);
+    if (success) {
+      setBackupMsg({ type: 'success', text: `💱 USD/TWD 匯率同步成功！協 ${(portfolio.usdRate ?? 32.2).toFixed(2)}` });
+    } else {
+      setBackupMsg({ type: 'error', text: '❌ 匯率同步失敗，請檢查網絡。' });
+    }
+    setTimeout(() => setBackupMsg(null), 4000);
+  };
+
   return (
     <div className="space-y-8 animate-fade-in duration-300">
       
-      {/* 財務摘要列 (Overview Bar) 五卡片升級版 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 select-none">
+      {/* 財務摘要列 (Overview Bar) 六卡片升級版 */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 select-none">
         
         {/* 1. 最新淨資產 */}
         <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-blue-500 col-span-2 sm:col-span-1">
@@ -413,6 +428,31 @@ export const OverviewPage: React.FC = () => {
             <ProgressBar value={firePercent} showText={false} />
           </div>
           <span className="text-[10px] text-slate-400 font-bold mt-1">目標：${fireTarget.toLocaleString()}</span>
+        </Card>
+
+        {/* 6. USD/TWD 即時匯率 */}
+        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-orange-400">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">USD/TWD 匯率</span>
+            <button
+              onClick={handleRefreshFx}
+              disabled={isFxRefreshing}
+              title="重新拉取 USD/TWD 即時匯率"
+              className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-orange-500 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isFxRefreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <span className="text-xl sm:text-2xl font-black text-orange-500 tracking-tight mt-1 tabular-nums">
+            {(portfolio.usdRate ?? 32.2).toFixed(2)}
+          </span>
+          {portfolio.fxLastUpdated ? (
+            <span className="text-[10px] font-bold mt-1 text-emerald-600 flex items-center gap-1 select-none">
+              ⚡ 自動同步 {new Date(portfolio.fxLastUpdated).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-bold mt-1 select-none">點擊同步</span>
+          )}
         </Card>
 
       </div>

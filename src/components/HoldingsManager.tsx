@@ -10,10 +10,12 @@ import {
   AlertCircle, 
   Edit3, 
   CheckCircle2,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 export const HoldingsManager: React.FC = () => {
-  const { state, toggleHoldingMode, addHolding, deleteHolding, updateHolding, refreshAllPrices, updateUsdRate } = useApp();
+  const { state, toggleHoldingMode, addHolding, deleteHolding, updateHolding, refreshAllPrices, updateUsdRate, refreshUsdRate } = useApp();
   const { portfolio } = state;
   const holdings = portfolio.holdings || [];
   const isHoldingMode = portfolio.isHoldingMode || false;
@@ -21,6 +23,7 @@ export const HoldingsManager: React.FC = () => {
   // UI 控制狀態
   const [isAdding, setIsAdding] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isFxRefreshing, setIsFxRefreshing] = useState(false);
   const [refreshMsg, setRefreshMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   // 新增/編輯表單狀態
@@ -85,7 +88,7 @@ export const HoldingsManager: React.FC = () => {
     setIsAdding(false);
   };
 
-  // 自動同步定價 API
+  // 自動同步股票報價 API
   const handleRefreshPrices = async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
@@ -98,6 +101,20 @@ export const HoldingsManager: React.FC = () => {
       setRefreshMsg({ type: 'success', text: '🎉 全體持股最新價格同步成功！' });
     } else {
       setRefreshMsg({ type: 'error', text: '❌ 自動同步失敗，請檢查網絡或個股代碼是否正確。' });
+    }
+    setTimeout(() => setRefreshMsg(null), 4000);
+  };
+
+  // [NEW] 手動觸發 USD/TWD 匯率同步
+  const handleRefreshFx = async () => {
+    if (isFxRefreshing) return;
+    setIsFxRefreshing(true);
+    const success = await refreshUsdRate();
+    setIsFxRefreshing(false);
+    if (success) {
+      setRefreshMsg({ type: 'success', text: `💱 USD/TWD 匯率同步成功！最新協 ${(state.portfolio.usdRate ?? 32.2).toFixed(2)}` });
+    } else {
+      setRefreshMsg({ type: 'error', text: '❌ 匯率同步失敗，使用現有存檔値。' });
     }
     setTimeout(() => setRefreshMsg(null), 4000);
   };
@@ -160,15 +177,47 @@ export const HoldingsManager: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              {/* 匯率微調 */}
-              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 text-[11px] font-bold text-slate-600">
-                <span>美金匯率 USD/TWD</span>
+              {/* 匯率自動同步狀態卷 */}
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
+                {/* 同步狀態灰 */}
+                {portfolio.fxLastUpdated ? (
+                  <span className="flex items-center gap-1 text-emerald-600">
+                    <Wifi className="w-3 h-3" />
+                    <span className="text-[10px] font-black">USD/TWD 自動同步</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 text-amber-500">
+                    <WifiOff className="w-3 h-3" />
+                    <span className="text-[10px] font-black">備用嵌入値</span>
+                  </span>
+                )}
+                {/* 即時匯率值 */}
+                <span className="text-sm font-black text-indigo-600 tabular-nums">
+                  {(usdRate).toFixed(2)}
+                </span>
+                {/* 最後同步時間 */}
+                {portfolio.fxLastUpdated && (
+                  <span className="text-[9px] text-slate-400 font-bold">
+                    {new Date(portfolio.fxLastUpdated).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
+                {/* 手動同步按鈕 */}
+                <button
+                  onClick={handleRefreshFx}
+                  disabled={isFxRefreshing}
+                  title="重新拉取 USD/TWD 即時匯率"
+                  className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isFxRefreshing ? 'animate-spin' : ''}`} />
+                </button>
+                {/* 保留微調輸入（防線手動覆寫） */}
                 <input
                   type="number"
                   value={usdRate}
                   onChange={(e) => updateUsdRate(parseFloat(e.target.value) || 32)}
-                  className="w-12 bg-transparent text-center border-b border-slate-300 focus:outline-none text-indigo-600 font-black"
+                  className="w-10 bg-transparent text-center border-b border-slate-300 focus:outline-none text-indigo-600 font-black text-[10px]"
                   step="0.1"
+                  title="手動覆寫匯率"
                 />
               </div>
 
