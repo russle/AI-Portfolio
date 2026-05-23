@@ -11,7 +11,7 @@ import {
 } from '../utils/rebalance';
 
 export const RebalancePage: React.FC = () => {
-  const { state, updatePortfolioAsset } = useApp();
+  const { state } = useApp();
   const { portfolio, allocation_target } = state;
 
   const [activeTab, setActiveTab] = useState<'exact' | 'cash' | 'threshold'>('exact');
@@ -36,22 +36,6 @@ export const RebalancePage: React.FC = () => {
         return [];
     }
   }, [activeTab, portfolio, allocation_target, newCashInput, thresholdInput]);
-
-  // 執行套用再平衡的邏輯
-  const handleApplyRebalance = () => {
-    if (window.confirm('確定要將此再平衡建議直接套用到您的資產帳戶中嗎？（此動作會直接修改您的資產額度）')) {
-      rebalanceData.forEach(item => {
-        const currentVal = portfolio[item.assetKey];
-        // 更新資產
-        updatePortfolioAsset(item.assetKey, Math.round(currentVal + item.actionAmount));
-      });
-      alert('已成功套用再平衡調整！');
-      // 如果是新資金再平衡，套用後可把新資金歸零
-      if (activeTab === 'cash') {
-        setNewCashInput('0');
-      }
-    }
-  };
 
   // 檢查是否有偏離需要警示 (任一偏離 > 5%)
   const maxDeviation = useMemo(() => {
@@ -229,17 +213,11 @@ export const RebalancePage: React.FC = () => {
         </div>
 
         {/* 底部操作與說明 */}
-        <div className="p-6 bg-slate-50/20 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="text-xs text-slate-400 leading-relaxed max-w-xl">
-            <span className="font-bold text-slate-500 block mb-1">💡 理財專家叮嚀：</span>
-            本平衡建議經由全自動演算法即時運算產生。您可以點擊右側「一鍵套用配置」直接將此結果寫入資產負債表中，或在「交易下單輔助頁面」中查看對應的具體股數下單建議。
+        <div className="p-6 bg-slate-50/20 border-t border-slate-100 flex items-center justify-between gap-4">
+          <div className="text-xs text-slate-400 leading-relaxed w-full">
+            <span className="font-bold text-slate-500 block mb-1.5">💡 理財專家叮嚀：</span>
+            本平衡建議經由全自動演算法即時運算產生，作為您的資產配置決策指南。**為了確保帳戶真實資產的 100% 嚴謹性與追蹤一致性，本頁面不提供直接覆寫帳目的按鈕**。您可以參考此建議，前往您的實體交易券商進行買賣，並在系統首頁手動記錄您每月最新的資產變化快照，或在「輔助下單 (Order)」分頁中，查看本期新入金按照權重折算後的台美股應買股數建議。
           </div>
-          <button
-            onClick={handleApplyRebalance}
-            className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md shadow-blue-200 hover:shadow-lg cursor-pointer transform hover:-translate-y-0.5 transition-all text-sm whitespace-nowrap self-end sm:self-center"
-          >
-            一鍵套用配置結果
-          </button>
         </div>
       </Card>
     </div>
