@@ -6,6 +6,7 @@ import { LineChart } from '../components/LineChart';
 import { AlertBanner } from '../components/AlertBanner';
 import { runMonteCarloSimulation as runMonteCarlo, assessRetirementFeasibility as assessFeasibility, runFullLifeMonteCarloSimulation } from '../utils/retirement';
 import { calculateSpendingForDieToZero } from '../utils/formulas';
+import { AlertTriangle } from 'lucide-react';
 
 export const RetirementPage: React.FC = () => {
   const { state, updateRetirementConfig } = useApp();
@@ -424,6 +425,11 @@ export const RetirementPage: React.FC = () => {
             <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
               依據您的設定，退休後實質複利報酬率為 <span className="font-bold text-slate-700">{((retirement.expected_return - retirement.inflation) * 100).toFixed(1)}%</span>。以 {retirement.life_expectancy ?? 85} 歲（剩餘 {dieToZeroResult.remainingYears} 年）財產歸零為目標進行年金均攤，退休後您的每月安全花費額度為：
             </p>
+            {/* 防呆代價提示 */}
+            <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[10px] font-bold text-amber-800 bg-amber-500/10 border border-amber-500/20 leading-relaxed max-w-2xl">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 animate-pulse" />
+              <span>長壽禦敵警示：Die to Zero 模擬在極端市場下會被動調降提領金額以確保資產至 {retirement.life_expectancy ?? 85} 歲剛好歸零。若遇連續熊市，晚年實質生活水平將顯著下降。</span>
+            </div>
           </div>
 
           {/* 右側大字金額 */}
@@ -527,20 +533,33 @@ export const RetirementPage: React.FC = () => {
               <span className="text-2xl font-black text-slate-700">
                 {fullLifeResult.depletionAgeP5 
                   ? `${fullLifeResult.depletionAgeP5} 歲花光` 
-                  : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
+                  : withdrawalRule === 'die_to_zero'
+                    ? '🛡️ 被動動態重均攤'
+                    : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
-            <p className="text-xs text-slate-400 leading-relaxed mt-2">
+            <p className="text-xs text-slate-400 leading-relaxed mt-2 font-medium">
               {fullLifeResult.depletionAgeP5 
                 ? `在市場極度低迷情況下，資產預計於退休後 ${fullLifeResult.depletionAgeP5 - targetRetirementAge} 年內耗盡。` 
-                : `即使在極端低迷行情下，資產也能安全支撐至 ${retirement.life_expectancy ?? 85} 歲以上不枯竭。`}
+                : withdrawalRule === 'die_to_zero'
+                  ? `💡 極端低迷行情下，資產絕不提前枯竭。但代價是您的生活費會被大盤暴跌【動態腰斬/收縮】，晚年實質生活水平將顯著調降。`
+                  : `即使在極端低迷行情下，資產也能安全支撐至 ${retirement.life_expectancy ?? 85} 歲以上不枯竭。`}
             </p>
           </div>
-          {fullLifeResult.depletionAgeP5 && (
+          {/* 其他法則的剛性割肉破產警示 */}
+          {fullLifeResult.depletionAgeP5 && withdrawalRule === 'four_percent' ? (
+            <div className="text-[10px] font-bold text-rose-600 bg-rose-500/10 px-2.5 py-1.5 rounded-lg border border-rose-500/20 mt-3">
+              ⚠️ 剛性提領在熊市底部割肉賣股加速枯竭，建議考慮 GK 動態護欄或 CAPE 估值避險。
+            </div>
+          ) : fullLifeResult.depletionAgeP5 ? (
             <div className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
               ⚠️ 長壽風險極高，建議追加儲蓄
             </div>
-          )}
+          ) : withdrawalRule === 'die_to_zero' ? (
+            <div className="text-[10px] font-bold text-amber-600 bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/20 mt-3">
+              ⚠️ 警惕：成功率 100% 的背後是犧牲生活品質，熊市下每月開銷將極度收縮。
+            </div>
+          ) : null}
         </Card>
 
         {/* P50 */}
