@@ -174,8 +174,10 @@ export const runFullLifeMonteCarloSimulation = (
   std: number = 0.15,
   inflation: number,
   monthlySpending: number,
-  strategy: 'four_percent' | 'gk_dynamic' | 'die_to_zero',
-  maxAge: number = 85
+  strategy: 'four_percent' | 'gk_dynamic' | 'die_to_zero' | 'cape_based',
+  maxAge: number = 85,
+  capeRatio: number = 30,
+  enableSpendingSmile: boolean = false
 ): FullLifeMonteCarloResult => {
   const numSimulations = 1000;
   const yearlyInvest = monthlyInvest * 12;
@@ -195,6 +197,9 @@ export const runFullLifeMonteCarloSimulation = (
 
   for (let s = 0; s < numSimulations; s++) {
     let currentAsset = initial;
+    let capeWithdrawAmount = 0; // 用於儲存 CAPE 法則的動態年提領額（隨通膨滾存）
+    let hasInitializedCape = false;
+
     for (let y = 1; y <= totalYears; y++) {
       const age = currentAge + y;
       const randomReturn = randomNormal(expectedReturn, std);
@@ -204,6 +209,21 @@ export const runFullLifeMonteCarloSimulation = (
         currentAsset = (currentAsset * (1 + randomReturn) + yearlyInvest) / (1 + inflation);
       } else {
         // 2. 提領消耗期 (已退休)
+        
+        // A. 計算支出微笑曲線折減因子 (Spending Smile)
+        let smileFactor = 1.0;
+        if (enableSpendingSmile) {
+          if (age <= 70) {
+            smileFactor = 1.0;
+          } else if (age <= 80) {
+            // 從 70 歲的 1.0 線性降到 80 歲的 0.75
+            smileFactor = 1.0 - (age - 70) * 0.025;
+          } else {
+            // 從 80 歲的 0.75 線性回升，至 90 歲回升為 1.0（限制最高為 1.0）
+            smileFactor = Math.min(1.0, 0.75 + (age - 80) * 0.025);
+          }
+        }
+
         let withdrawAmount = yearlySpending;
         
         if (strategy === 'gk_dynamic') {
@@ -222,7 +242,22 @@ export const runFullLifeMonteCarloSimulation = (
           } else {
             withdrawAmount = currentAsset;
           }
+        } else if (strategy === 'cape_based') {
+          // CAPE 估值連動提領法則
+          if (!hasInitializedCape) {
+            // 退休第一年，依據退休點累積資產與 CAPE 初始提領率計算 (1.5% + 50/CAPE %)
+            const initialWithdrawRate = 0.015 + 0.5 / capeRatio;
+            capeWithdrawAmount = currentAsset * initialWithdrawRate;
+            hasInitializedCape = true;
+          } else {
+            // 之後年份隨通膨調整
+            capeWithdrawAmount = capeWithdrawAmount * (1 + inflation);
+          }
+          withdrawAmount = capeWithdrawAmount;
         }
+
+        // 套用開銷微笑曲線折減
+        withdrawAmount = withdrawAmount * smileFactor;
         
         // 扣除提領金額並滾存隨機報酬率，隨後折算實質購買力
         currentAsset = Math.max(0, currentAsset - withdrawAmount);

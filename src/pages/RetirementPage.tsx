@@ -13,7 +13,7 @@ export const RetirementPage: React.FC = () => {
 
   // 使用者可手動輸入與調整退休年限與提領法則
   const [targetRetirementAge, setTargetRetirementAge] = useState<number>(60);
-  const [withdrawalRule, setWithdrawalRule] = useState<'four_percent' | 'gk_dynamic' | 'die_to_zero'>('four_percent');
+  const [withdrawalRule, setWithdrawalRule] = useState<'four_percent' | 'gk_dynamic' | 'die_to_zero' | 'cape_based'>('four_percent');
 
   // 全球股市說明：股債配置是以全球股市來估算
   const globalMarketNote = "本系統之股債配置預估報酬率，是以全球股市（例如 MSCI ACWI 指數）及全球債券市場之長期歷史年化回報率為估算基礎。全球股市在過去數十年間的年化回報率約為 7%~8%，投資組合會依據您的股債比例調和出對應的預期報酬率。";
@@ -52,6 +52,12 @@ export const RetirementPage: React.FC = () => {
           desc: '設有「提領安全護欄」。初始提領率可設較高（如 5%），但當市場下跌導致資產縮水、使提領率高於安全護欄時，將主動調降提領金額 10%；反之當市場大漲時則調升提領。',
           detail: '優點：能有效避免在熊市初期過度提領導致資產歸零，成功率極高；缺點：退休生活費會隨市場波動。'
         };
+      case 'cape_based':
+        return {
+          title: 'CAPE 估值連動提領法則 (Shiller PE 連動)',
+          desc: '基於諾貝爾獎得主席勒的 CAPE (本益比) 動態計算初始提領率。公式為：初始提領率 = 1.5% + 50 / CAPE 本益比。當市場估值過高 (泡沫期) 時自動防禦收縮提領，防止序列風險；估值便宜 (熊市底) 時自動增加提領，充分享受人生。',
+          detail: '優點：以嚴謹的估值理論極限規避退休初期股市大跌的歸零威脅；缺點：初始提領金額完全取決於您退休時的市場估值高低。'
+        };
       case 'die_to_zero':
         return {
           title: 'Die to Zero (花光為止法則)',
@@ -66,7 +72,8 @@ export const RetirementPage: React.FC = () => {
   // 執行全生命週期（累積期 + 提領消耗期）的蒙地卡羅隨機模擬
   const fullLifeResult = useMemo(() => {
     const strategy = withdrawalRule === 'four_percent' ? 'four_percent' :
-                     withdrawalRule === 'gk_dynamic' ? 'gk_dynamic' : 'die_to_zero';
+                     withdrawalRule === 'gk_dynamic' ? 'gk_dynamic' :
+                     withdrawalRule === 'cape_based' ? 'cape_based' : 'die_to_zero';
                      
     return runFullLifeMonteCarloSimulation(
       currentAsset,
@@ -78,9 +85,11 @@ export const RetirementPage: React.FC = () => {
       retirement.inflation,
       retirement.monthly_spending,
       strategy,
-      retirement.life_expectancy ?? 85 // maxAge 動態從 Context 取值
+      retirement.life_expectancy ?? 85, // maxAge 動態從 Context 取值
+      retirement.cape_ratio ?? 30, // capeRatio 動態取值
+      retirement.spending_smile ?? false // enableSpendingSmile 開關連動
     );
-  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule, retirement.life_expectancy]);
+  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule, retirement.life_expectancy, retirement.cape_ratio, retirement.spending_smile]);
 
   // 將全生命週期蒙地卡羅結果轉換成 Recharts 格式
   const chartData = useMemo(() => {
@@ -283,6 +292,40 @@ export const RetirementPage: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {/* CAPE 與 微笑曲線 */}
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">席勒本益比 (CAPE)</label>
+                  <input
+                    type="number"
+                    value={retirement.cape_ratio ?? 30}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 0;
+                      // 限制在 10 ~ 50 之間以防禦隨機溢出
+                      updateRetirementConfig('cape_ratio', Math.min(50, Math.max(10, val)));
+                    }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 font-mono"
+                    min="10"
+                    max="50"
+                  />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <label className="text-xs font-bold text-slate-400 block mb-2">開銷微笑曲線</label>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={!!retirement.spending_smile}
+                      onChange={(e) => updateRetirementConfig('spending_smile', e.target.checked ? 1 : 0)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600">
+                      {retirement.spending_smile ? '已啟用 ✨' : '已關閉'}
+                    </span>
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -330,6 +373,16 @@ export const RetirementPage: React.FC = () => {
                   }`}
                 >
                   ☠️ Die to Zero (花光為止)
+                </button>
+                <button
+                  onClick={() => setWithdrawalRule('cape_based')}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-bold text-left transition-all ${
+                    withdrawalRule === 'cape_based' 
+                      ? 'bg-blue-50/60 border-blue-200 text-blue-700 shadow-sm'
+                      : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}
+                >
+                  📈 CAPE 估值連動法則 (席勒 PE)
                 </button>
               </div>
 
@@ -389,6 +442,76 @@ export const RetirementPage: React.FC = () => {
                   比預設支出少 ${Math.round(Math.abs(dieToZeroResult.diffAmount)).toLocaleString()} 元 ({Math.abs(dieToZeroResult.diffPercent).toFixed(1)}%) ⚠️
                 </span>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* GK 法則安全護欄指南發光卡片 */}
+      {withdrawalRule === 'gk_dynamic' && (
+        <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/50 to-sky-50/30 backdrop-blur-md p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 animate-fade-in">
+          <div className="space-y-2 flex-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-blue-700 bg-blue-100/60 border border-blue-200/50 uppercase tracking-wider">
+              🛡️ Guyton-Klinger 動態安全護欄防禦線指南
+            </div>
+            <h4 className="text-lg font-black text-slate-800 tracking-tight">
+              初始提領率為 5%，年初始開銷為 <span className="text-blue-600 font-extrabold">${(retirement.monthly_spending * 12).toLocaleString()}</span> 元。
+            </h4>
+            <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
+              GK 護欄將根據您設定的預期支出，實時精算退休資產波盪中的安全紅線與享樂綠線。當退休後的資產現值跨越臨界點，系統將自動觸發動態提領率調整：
+            </p>
+          </div>
+
+          <div className="flex gap-4 min-w-[340px]">
+            {/* 享樂綠線 */}
+            <div className="flex-1 p-3.5 bg-emerald-50/60 border border-emerald-100/80 rounded-xl flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">🟢 富裕增領線</span>
+              <span className="text-lg font-black text-emerald-700 mt-1 font-mono">
+                ${Math.round(1.2 * (retirement.monthly_spending * 12 / 0.05)).toLocaleString()} <span className="text-[10px] font-sans font-medium text-slate-400">元</span>
+              </span>
+              <p className="text-[8px] text-slate-400 mt-1 leading-normal">
+                資產漲過此線，提領率偏低，觸發安全溢出，**自動增領 10%** 提升生活品質。
+              </p>
+            </div>
+
+            {/* 禦敵紅線 */}
+            <div className="flex-1 p-3.5 bg-rose-50/60 border border-rose-100/80 rounded-xl flex flex-col justify-between">
+              <span className="text-[9px] font-bold text-rose-500 uppercase tracking-wider">🔴 防禦減領線</span>
+              <span className="text-lg font-black text-rose-700 mt-1 font-mono">
+                ${Math.round(0.8 * (retirement.monthly_spending * 12 / 0.05)).toLocaleString()} <span className="text-[10px] font-sans font-medium text-slate-400">元</span>
+              </span>
+              <p className="text-[8px] text-slate-400 mt-1 leading-normal">
+                資產跌破此線，面臨歸零威脅，觸發警戒收縮，**自動減領 10%** 避險防空。
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CAPE 估值提領指南卡片 */}
+      {withdrawalRule === 'cape_based' && (
+        <div className="relative overflow-hidden rounded-2xl border border-blue-100 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 backdrop-blur-md p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6 animate-fade-in">
+          <div className="space-y-2 flex-1">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold text-blue-700 bg-blue-100/60 border border-blue-200/50 uppercase tracking-wider">
+              📈 CAPE 估值連動提領指南
+            </div>
+            <h4 className="text-lg font-black text-slate-800 tracking-tight">
+              當前設定市場席勒本益比為 <span className="text-blue-600 font-extrabold">CAPE {retirement.cape_ratio ?? 30}</span>。
+            </h4>
+            <p className="text-slate-500 text-xs leading-relaxed max-w-2xl">
+              根據席勒 CAPE 提領模型（初始提領率 = 1.5% + 50 / CAPE %），系統為您動態精算出科學的初始提領率。隨後年份此金額將自動隨通膨滾動，極限規避退休初期序列報酬風險：
+            </p>
+          </div>
+
+          <div className="flex flex-col items-center md:items-end justify-center p-4 bg-white/60 rounded-xl border border-white/80 shadow-inner min-w-[240px]">
+            <span className="text-[10px] font-bold text-slate-400 tracking-wider">Shiller PE 對應初始提領率</span>
+            <span className="text-3xl font-black text-blue-600 my-1 font-mono tracking-tight">
+              {(0.015 * 100 + 50 / (retirement.cape_ratio ?? 30)).toFixed(2)}%
+            </span>
+            <div className="text-center md:text-right mt-1">
+              <span className="inline-flex items-center text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
+                估值越高，初始提領越保守
+              </span>
             </div>
           </div>
         </div>

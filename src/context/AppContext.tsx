@@ -50,6 +50,8 @@ export type RetirementConfig = {
   expected_return: number; // 年化報酬率，例如 0.065
   inflation: number;       // 年通膨率，例如 0.02
   life_expectancy: number; // [NEW] 預估壽命設定
+  cape_ratio: number;      // [NEW] 市場席勒本益比 (CAPE Ratio)，例如 30
+  spending_smile: boolean; // [NEW] 是否啟用退休支出微笑曲線 (Spending Smile)
 };
 
 export type AiPortfolioState = {
@@ -119,7 +121,9 @@ const DEFAULT_STATE: AiPortfolioState = {
     monthly_invest: 20000,
     expected_return: 0.07,
     inflation: 0.02,
-    life_expectancy: 85
+    life_expectancy: 85,
+    cape_ratio: 30,
+    spending_smile: false
   }
 };
 
