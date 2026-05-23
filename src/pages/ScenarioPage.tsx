@@ -8,7 +8,7 @@ import { runScenarioProjection } from '../utils/scenario';
 import { runMonteCarloSimulation } from '../utils/retirement';
 
 export const ScenarioPage: React.FC = () => {
-  const { state, updatePortfolioAsset, updateRetirementConfig, updateAllocationTarget } = useApp();
+  const { state } = useApp();
   const { portfolio, retirement } = state;
 
   // 1. 本地臨時預演狀態，預設為 current context state
@@ -85,31 +85,6 @@ export const ScenarioPage: React.FC = () => {
       // 純函數拷貝運算，不污染全域
       const nextState = runScenarioProjection(state, scenarioId as any);
       setProjectedState(nextState);
-    }
-  };
-
-  // 5. 將投影數據確認寫回全域 Context
-  const handleApplyToRealState = () => {
-    if (window.confirm('警告：這將會永久覆寫您在帳戶中的真實資產配置與通膨參數！確定要將此模擬結果寫入您的真實資產嗎？')) {
-      
-      // 寫回 Portfolio
-      const p = projectedState.portfolio;
-      const assetKeys: AssetClassKey[] = ['cash', 'fund', 'tw_stock', 'us_stock', 'crypto'];
-      assetKeys.forEach(key => {
-        updatePortfolioAsset(key, p[key] as number);
-      });
-
-      // 寫回 Retirement Config
-      const r = projectedState.retirement;
-      (Object.keys(r) as Array<keyof typeof r>).forEach(key => {
-        updateRetirementConfig(key, r[key] as number);
-      });
-
-      // 寫回 Allocation Target
-      updateAllocationTarget(projectedState.allocation_target);
-
-      alert('成功！已將此模擬情境之資產與財務設定寫回您的帳戶！');
-      setSelectedScenario('none');
     }
   };
 
@@ -200,28 +175,15 @@ export const ScenarioPage: React.FC = () => {
       {/* 情境詳細分析說明 */}
       {scenarioDetails && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card className="lg:col-span-2 p-6 bg-slate-50 border border-slate-100 flex flex-col justify-between">
+          <Card className="lg:col-span-3 p-6 bg-slate-50 border border-slate-100 flex flex-col justify-between">
             <div className="space-y-3">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest bg-blue-100 text-blue-700 uppercase">模擬中</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest bg-blue-100 text-blue-700 uppercase">模擬沙盒預演中</span>
               <h3 className="text-xl font-bold text-slate-800">{scenarioDetails.title}</h3>
               <p className="text-slate-500 text-xs leading-relaxed">{scenarioDetails.description}</p>
             </div>
             <div className="mt-4 pt-3 border-t border-slate-200/60 text-xs font-bold text-slate-600">
               💡 {scenarioDetails.advice}
             </div>
-          </Card>
-
-          <Card className="lg:col-span-1 p-6 flex flex-col items-center justify-center bg-gradient-to-br from-indigo-50/50 to-blue-50/50 border border-indigo-100/40">
-            <span className="text-xs font-bold text-indigo-400 block mb-2">情境套用決策</span>
-            <button
-              onClick={handleApplyToRealState}
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md shadow-blue-200 hover:shadow-lg transition-all text-xs cursor-pointer transform hover:-translate-y-0.5 text-center"
-            >
-              確認套用此情境配置
-            </button>
-            <p className="text-[10px] text-slate-400 text-center mt-2 leading-relaxed">
-              點擊後將會覆寫您的真實帳戶資產與退休通膨設定，使其與此模擬完全一致。
-            </p>
           </Card>
         </div>
       )}
