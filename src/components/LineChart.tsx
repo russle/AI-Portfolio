@@ -87,6 +87,10 @@ export const LineChart: React.FC<LineChartProps> = ({
             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
             labelStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
             formatter={(value: any) => [`$${Number(value).toLocaleString()} 元`]}
+            itemSorter={(item: any) => {
+              const index = lines.findIndex(l => l.key === item.dataKey);
+              return index !== -1 ? index : 999;
+            }}
           />
           
           {lines.length > 1 && (
