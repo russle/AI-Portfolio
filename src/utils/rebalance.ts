@@ -255,3 +255,129 @@ export const calculateCorrelationMatrix = (
     })
   );
 };
+
+import type { HoldingItem } from '../context/AppContext';
+
+export interface DcaAllocationResultItem {
+  holdingId: string;
+  symbol: string;
+  name: string;
+  assetKey: AssetClassKey;
+  currentValueTwd: number;
+  targetPercent: number; // 個股推估之總配置佔比
+  gapTwd: number;        // 低配缺口額 (TWD)
+  allocatedAmountTwd: number; // 分配到的台幣預算
+  sharesToBuy: number;   // 建議買入股數
+  remainingCashTwd: number; // 剩餘零頭台幣找零
+  priceTwd: number;      // 台幣單價
+  currency: 'TWD' | 'USD';
+  originalPrice: number; // 原始原幣單價
+}
+
+/**
+ * 4. 定期定額智慧分配 (DCA Budget Rebalance Advisor)
+ * 在只買不賣前提下，優先將 Monthly Regular Budget (DCA budget) 分配給低配個股
+ */
+export const calculateDcaAllocation = (
+  holdings: HoldingItem[],
+  portfolio: Portfolio,
+  target: AllocationTarget,
+  budget: number,
+  usdRate: number
+): DcaAllocationResultItem[] => {
+  const totalValue = calculateTotalPortfolioValue(portfolio);
+  
+  // 1. 計算所有持股標的當前台幣市值
+  const holdingDetails = holdings.map(h => {
+    const priceTwd = h.currency === 'USD' ? h.currentPrice * usdRate : h.currentPrice;
+    const valueTwd = h.shares * priceTwd;
+    return {
+      ...h,
+      priceTwd,
+      valueTwd
+    };
+  });
+
+  // 計算每個大類的當前總市值
+  const classTotals: Record<AssetClassKey, number> = {
+    cash: portfolio.cash,
+    fund: portfolio.fund,
+    tw_stock: portfolio.tw_stock,
+    us_stock: portfolio.us_stock,
+    crypto: portfolio.crypto
+  };
+
+  // 2. 確定每支個股的目標配置佔比
+  const dcaItems = holdingDetails.map(h => {
+    const classTargetPercent = target[ASSET_MAP[h.assetType].targetKey];
+    const classTotalValue = classTotals[h.assetType];
+    
+    let targetPercent = 0;
+    if (classTotalValue > 0) {
+      targetPercent = classTargetPercent * (h.valueTwd / classTotalValue);
+    } else {
+      // Fallback
+      const siblingCount = holdings.filter(sibling => sibling.assetType === h.assetType).length;
+      targetPercent = siblingCount > 0 ? classTargetPercent / siblingCount : 0;
+    }
+
+    const nextTotalValue = totalValue + budget;
+    const idealValueTwd = nextTotalValue * targetPercent;
+    const gapTwd = idealValueTwd - h.valueTwd;
+
+    return {
+      holdingId: h.id,
+      symbol: h.symbol,
+      name: h.name,
+      assetKey: h.assetType,
+      currentValueTwd: h.valueTwd,
+      targetPercent,
+      gapTwd: gapTwd > 0 ? gapTwd : 0, // 只買不賣
+      priceTwd: h.priceTwd,
+      currency: h.currency,
+      originalPrice: h.currentPrice
+    };
+  });
+
+  const totalPositiveGap = dcaItems.reduce((sum, item) => sum + item.gapTwd, 0);
+
+  // 3. 分配預算與折算股數
+  return dcaItems.map(item => {
+    let allocatedAmountTwd = 0;
+    if (totalPositiveGap > 0) {
+      allocatedAmountTwd = budget * (item.gapTwd / totalPositiveGap);
+    } else {
+      allocatedAmountTwd = budget * item.targetPercent;
+    }
+
+    let sharesToBuy = 0;
+    let remainingCashTwd = allocatedAmountTwd;
+
+    if (item.priceTwd > 0) {
+      if (item.assetKey === 'crypto') {
+        sharesToBuy = allocatedAmountTwd / item.priceTwd;
+        remainingCashTwd = 0;
+      } else {
+        sharesToBuy = Math.floor(allocatedAmountTwd / item.priceTwd);
+        const actualSpent = sharesToBuy * item.priceTwd;
+        remainingCashTwd = allocatedAmountTwd - actualSpent;
+      }
+    }
+
+    return {
+      holdingId: item.holdingId,
+      symbol: item.symbol,
+      name: item.name,
+      assetKey: item.assetKey,
+      currentValueTwd: item.currentValueTwd,
+      targetPercent: item.targetPercent,
+      gapTwd: item.gapTwd,
+      allocatedAmountTwd,
+      sharesToBuy,
+      remainingCashTwd,
+      priceTwd: item.priceTwd,
+      currency: item.currency,
+      originalPrice: item.originalPrice
+    };
+  });
+};

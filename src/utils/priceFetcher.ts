@@ -20,52 +20,117 @@ export const formatSymbol = (symbol: string): string => {
   return clean;
 };
 
-/**
- * 抓取單一標的的最新即時價格 (TWD 或 USD，依標的本身而定)
- */
-export const fetchLatestPrice = async (symbol: string): Promise<number | null> => {
+const CACHE_KEY = 'ticker_prices_cache';
+const TTL = 15 * 60 * 1000; // 15 分鐘快取 (毫秒)
+
+// 取得快取資料
+const getCachedPrices = (): Record<string, { price: number; timestamp: number }> => {
   try {
-    const formatted = formatSymbol(symbol);
-    const targetUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${formatted}`;
-    
-    // 使用 allorigins 作為免費、無須憑證的 CORS 代理
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+};
+
+// 儲存快取資料
+const saveCachedPrices = (cache: Record<string, { price: number; timestamp: number }>) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+  } catch (error) {
+    console.error('Failed to save price cache to LocalStorage:', error);
+  }
+};
+
+/**
+ * 批次抓取多個標的的最新即時價格（具備 15 分鐘 TTL 本地快取）
+ */
+export const fetchLatestPrices = async (symbols: string[]): Promise<Record<string, number | null>> => {
+  const result: Record<string, number | null> = {};
+  
+  // 初始化為 null
+  symbols.forEach(sym => {
+    result[sym] = null;
+  });
+
+  if (symbols.length === 0) return result;
+
+  const now = Date.now();
+  const cache = getCachedPrices();
+  const missingSymbols: string[] = [];
+
+  // 1. 優先從本地快取加載未過期價格
+  symbols.forEach(sym => {
+    const formatted = formatSymbol(sym);
+    const cached = cache[formatted];
+    if (cached && (now - cached.timestamp < TTL) && typeof cached.price === 'number') {
+      result[sym] = cached.price;
+    } else {
+      missingSymbols.push(sym);
+    }
+  });
+
+  // 2. 如果沒有缺失價格，直接返回
+  if (missingSymbols.length === 0) {
+    return result;
+  }
+
+  // 3. 發起批次網路請求抓取缺失價格
+  try {
+    const formattedSymbols = missingSymbols.map(sym => formatSymbol(sym));
+    const targetUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${formattedSymbols.join(',')}`;
     const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
 
-    // 設置 8 秒超時防禦
     const controller = new AbortController();
-    const id = setTimeout(() => controller.abort(), 8000);
+    const id = setTimeout(() => controller.abort(), 10000); // 10秒超時防禦
 
     const res = await fetch(proxyUrl, { signal: controller.signal });
     clearTimeout(id);
 
     if (!res.ok) {
-      console.warn(`Price Fetch API responded with error for ${formatted}`);
-      return null;
+      console.warn(`Batch Price Fetch API responded with error for symbols:`, formattedSymbols);
+      return result;
     }
 
     const data = await res.json();
     if (!data || !data.contents) {
-      return null;
+      return result;
     }
 
-    // 解析 contents 中包裝的 Yahoo Finance 真實 JSON
     const contents = JSON.parse(data.contents);
-    
-    if (
-      contents &&
-      contents.chart &&
-      contents.chart.result &&
-      contents.chart.result.length > 0
-    ) {
-      const meta = contents.chart.result[0].meta;
-      const price = meta.regularMarketPrice;
-      
-      if (typeof price === 'number') {
-        return price;
-      }
+    const newCache = getCachedPrices(); // 再次讀取快取以防並發覆寫
+
+    if (contents && contents.quoteResponse && contents.quoteResponse.result) {
+      const items = contents.quoteResponse.result;
+      items.forEach((item: any) => {
+        const price = item.regularMarketPrice;
+        const origSymbol = missingSymbols.find(sym => formatSymbol(sym) === item.symbol);
+        if (origSymbol && typeof price === 'number') {
+          result[origSymbol] = price;
+          const formatted = formatSymbol(origSymbol);
+          newCache[formatted] = {
+            price,
+            timestamp: now
+          };
+        }
+      });
+      saveCachedPrices(newCache);
     }
-    
-    return null;
+
+    return result;
+  } catch (error) {
+    console.error(`Failed to batch fetch prices:`, error);
+    return result;
+  }
+};
+
+/**
+ * 抓取單一標的的最新即時價格 (優先調用批次快取機制)
+ */
+export const fetchLatestPrice = async (symbol: string): Promise<number | null> => {
+  try {
+    const result = await fetchLatestPrices([symbol]);
+    return result[symbol] ?? null;
   } catch (error) {
     console.error(`Failed to fetch price for symbol [${symbol}]:`, error);
     return null;

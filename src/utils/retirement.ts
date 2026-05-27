@@ -18,6 +18,23 @@ export interface MonteCarloResult {
 }
 
 /**
+ * 依據年齡動態計算 Glide Path 股債配比與預期報酬、標準差
+ */
+export const calculateGlidePathReturnAndStd = (
+  age: number,
+  rStock: number = 0.08,
+  sigmaStock: number = 0.18,
+  rBond: number = 0.03,
+  sigmaBond: number = 0.06
+): { expectedReturn: number; std: number; stockWeight: number } => {
+  // 110 - age 經典生命週期配置，限制在 20% 到 90% 之間
+  const stockWeight = Math.max(0.2, Math.min(0.9, (110 - age) / 100));
+  const expectedReturn = stockWeight * rStock + (1 - stockWeight) * rBond;
+  const std = stockWeight * sigmaStock + (1 - stockWeight) * sigmaBond;
+  return { expectedReturn, std, stockWeight };
+};
+
+/**
  * 實作 1000 次蒙地卡羅隨機模擬
  */
 export const runMonteCarloSimulation = (
@@ -177,7 +194,8 @@ export const runFullLifeMonteCarloSimulation = (
   strategy: 'four_percent' | 'gk_dynamic' | 'die_to_zero' | 'cape_based',
   maxAge: number = 85,
   capeRatio: number = 30,
-  enableSpendingSmile: boolean = false
+  enableSpendingSmile: boolean = false,
+  enableGlidePath: boolean = false
 ): FullLifeMonteCarloResult => {
   const numSimulations = 1000;
   const yearlyInvest = monthlyInvest * 12;
@@ -202,7 +220,17 @@ export const runFullLifeMonteCarloSimulation = (
 
     for (let y = 1; y <= totalYears; y++) {
       const age = currentAge + y;
-      const randomReturn = randomNormal(expectedReturn, std);
+      
+      // 動態計算 Glide Path 配置的預期報酬率與標準差
+      let currentMean = expectedReturn;
+      let currentStd = std;
+      if (enableGlidePath) {
+        const gp = calculateGlidePathReturnAndStd(age);
+        currentMean = gp.expectedReturn;
+        currentStd = gp.std;
+      }
+      
+      const randomReturn = randomNormal(currentMean, currentStd);
       
       if (age <= retireAge) {
         // 1. 累積期 (當前年齡至退休年齡)
@@ -234,10 +262,11 @@ export const runFullLifeMonteCarloSimulation = (
             withdrawAmount = yearlySpending * 0.9; // 防禦減領 10%
           }
         } else if (strategy === 'die_to_zero') {
-          // Die to Zero 年金均攤
+          // Die to Zero 年金均攤 (動態 Glide Path 實質報酬計算)
           const remainingYears = maxAge - age + 1;
           if (remainingYears > 0) {
-            const annuityFactor = (1 - Math.pow(1 + rReal, -remainingYears)) / rReal;
+            const stepReal = enableGlidePath ? Math.max(0.01, currentMean - inflation) : rReal;
+            const annuityFactor = (1 - Math.pow(1 + stepReal, -remainingYears)) / stepReal;
             withdrawAmount = currentAsset / annuityFactor;
           } else {
             withdrawAmount = currentAsset;

@@ -24,6 +24,9 @@ export const RetirementPage: React.FC = () => {
   // [NEW] 歷史黑天鵝回測狀態
   const [crisisScenario, setCrisisScenario] = useState<'tech_2000' | 'financial_2008' | 'inflation_2022'>('financial_2008');
 
+  // [NEW] 生命週期動態 Glide Path 配置開關
+  const [enableGlidePath, setEnableGlidePath] = useState<boolean>(false);
+
   // 全球股市說明：股債配置是以全球股市來估算
   const globalMarketNote = "本系統之股債配置預估報酬率，是以全球股市（例如 MSCI ACWI 指數）及全球債券 market 之長期歷史年化回報率為估算基礎。全球股市在過去數十年間的年化回報率約為 7%~8%，投資組合會依據您的股債比例調和出對應的預期報酬率。";
 
@@ -96,9 +99,10 @@ export const RetirementPage: React.FC = () => {
       strategy,
       retirement.life_expectancy ?? 85, // maxAge 動態從 Context 取值
       retirement.cape_ratio ?? 30, // capeRatio 動態取值
-      retirement.spending_smile ?? false // enableSpendingSmile 開關連動
+      retirement.spending_smile ?? false, // enableSpendingSmile 開關連動
+      enableGlidePath // [NEW] 串接動態 Glide Path
     );
-  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule, retirement.life_expectancy, retirement.cape_ratio, retirement.spending_smile]);
+  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, withdrawalRule, retirement.life_expectancy, retirement.cape_ratio, retirement.spending_smile, enableGlidePath]);
 
   // 將全生命週期蒙地卡羅結果轉換成 Recharts 格式
   const chartData = useMemo(() => {
@@ -379,8 +383,32 @@ export const RetirementPage: React.FC = () => {
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600">
+                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 font-mono">
                       {retirement.spending_smile ? '已啟用 ✨' : '已關閉'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+
+              {/* [NEW] 生命週期動態 Glide Path */}
+              <div className="pt-3.5 border-t border-slate-100 mt-2.5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block">生命週期動態 Glide Path</label>
+                    <span className="text-[10px] text-slate-400 font-semibold block leading-normal mt-0.5 max-w-[200px]">
+                      💡 隨模擬年齡增長自動線性調降高風險股權配比，大幅避免長壽資金耗盡歸零。
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none ml-2 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={enableGlidePath}
+                      onChange={(e) => setEnableGlidePath(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 min-w-10 text-center font-mono">
+                      {enableGlidePath ? '已啟用 ✨' : '已關閉'}
                     </span>
                   </label>
                 </div>
