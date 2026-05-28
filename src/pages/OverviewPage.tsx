@@ -293,6 +293,49 @@ export const OverviewPage: React.FC = () => {
     return null;
   }, [portfolio, allocation_target, totalNetWorth]);
 
+  // [NEW] Drift Guard 智慧資產偏離狀態計算 (Drift Alert Threshold Decision & Portfolio drift threshold checking)
+  const driftStatus = useMemo(() => {
+    if (totalNetWorth <= 0) {
+      return {
+        hasDrift: false,
+        items: [],
+        isHealthy: false
+      };
+    }
+
+    const actualPercents = {
+      tw_stock: portfolio.tw_stock / totalNetWorth,
+      us_stock: portfolio.us_stock / totalNetWorth,
+      bond: portfolio.fund / totalNetWorth,
+      cash: portfolio.cash / totalNetWorth,
+      crypto: portfolio.crypto / totalNetWorth
+    };
+
+    const deviations = [
+      { name: '台股', diff: actualPercents.tw_stock - allocation_target.tw_stock, absDiff: Math.abs(actualPercents.tw_stock - allocation_target.tw_stock) },
+      { name: '美股', diff: actualPercents.us_stock - allocation_target.us_stock, absDiff: Math.abs(actualPercents.us_stock - allocation_target.us_stock) },
+      { name: '基金/債券', diff: actualPercents.bond - allocation_target.bond, absDiff: Math.abs(actualPercents.bond - allocation_target.bond) },
+      { name: '現金', diff: actualPercents.cash - allocation_target.cash, absDiff: Math.abs(actualPercents.cash - allocation_target.cash) },
+      { name: '加密貨幣', diff: actualPercents.crypto - allocation_target.crypto, absDiff: Math.abs(actualPercents.crypto - allocation_target.crypto) }
+    ];
+
+    // 過濾出偏離值 >= 5% 的大類，並依照 absDiff 降序排序
+    const highDeviations = deviations
+      .filter(d => d.absDiff >= 0.05)
+      .sort((a, b) => b.absDiff - a.absDiff);
+
+    const hasDrift = highDeviations.length > 0;
+    
+    // (Safe guard maintenance message) 當所有大類配置偏離絕對值均嚴格小於 5% 時為 healthy 狀態
+    const isHealthy = !hasDrift;
+
+    return {
+      hasDrift,
+      items: highDeviations,
+      isHealthy
+    };
+  }, [portfolio, allocation_target, totalNetWorth]);
+
   // 備份匯出處理
   const handleExport = () => {
     try {
@@ -456,6 +499,103 @@ export const OverviewPage: React.FC = () => {
         </Card>
 
       </div>
+
+      {/* [NEW] Drift Guard 智慧資產偏離警報 / 健康維持橫幅 (Alert Banner Glassmorphism UI) */}
+      {totalNetWorth > 0 && (
+        <div className="space-y-4">
+          {driftStatus.hasDrift ? (
+            <div className="relative group overflow-hidden rounded-2xl border border-amber-200/80 bg-amber-50/80 backdrop-blur-md p-4 sm:p-5 shadow-lg shadow-amber-500/5 transition-all duration-300 hover:shadow-amber-500/10 hover:border-amber-300">
+              {/* 發光背景效果 */}
+              <div 
+                className="absolute -inset-y-12 -inset-x-12 opacity-50 blur-xl pointer-events-none" 
+                style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.15) 0%, transparent 70%)' }}
+              />
+              
+              <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* 左側：警告圖示與偏離文字 */}
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-amber-100 text-amber-600 rounded-xl flex-shrink-0 shadow-inner mt-0.5">
+                    <Activity className="w-5 h-5 animate-pulse" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-amber-900 flex items-center gap-1.5">
+                      ⚠️ Drift Guard 智慧配置警報
+                      <span className="text-[10px] font-black px-1.5 py-0.5 bg-amber-200/70 text-amber-800 rounded-md">
+                        偏離度 ≥ 5%
+                      </span>
+                    </h3>
+                    <p className="text-xs text-amber-800/90 font-bold mt-1 leading-relaxed">
+                      檢測到大類配置偏離黃金安全區間！偏離度排序（由大到小）：{' '}
+                      {/* 行動端與桌面端分流：行動端僅顯示前 2 名以防折行，桌面端顯示全部 */}
+                      <span className="inline md:hidden">
+                        {driftStatus.items.slice(0, 2).map((item) => {
+                          const sign = item.diff > 0 ? '+' : '';
+                          return (
+                            <strong key={item.name} className="text-amber-950 underline decoration-amber-400 font-extrabold ml-1">
+                              {item.name} ({sign}{(item.diff * 100).toFixed(1)}%)
+                            </strong>
+                          );
+                        })}
+                        {driftStatus.items.length > 2 && <span className="text-amber-700/80 ml-1">等共 {driftStatus.items.length} 個大類</span>}
+                      </span>
+                      <span className="hidden md:inline">
+                        {driftStatus.items.map((item, idx) => {
+                          const sign = item.diff > 0 ? '+' : '';
+                          return (
+                            <span key={item.name} className="mr-2">
+                              {idx > 0 && '、'}
+                              <strong className="text-amber-950 font-extrabold">
+                                {item.name} ({sign}{(item.diff * 100).toFixed(1)}%)
+                              </strong>
+                            </span>
+                          );
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 右側：跳轉決策導航按鈕 (⚖️ 再平衡 & 💰 下單) */}
+                <div className="flex flex-wrap items-center gap-2.5 flex-shrink-0">
+                  <button
+                    onClick={() => navigate('/rebalance')}
+                    className="flex items-center gap-1.5 py-2 px-3.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-sm shadow-amber-600/10 cursor-pointer transition-all duration-200 active:scale-95"
+                  >
+                    ⚖️ 一鍵智慧再平衡
+                  </button>
+                  <button
+                    onClick={() => navigate('/order')}
+                    className="flex items-center gap-1.5 py-2 px-3.5 bg-white/90 hover:bg-slate-50 border border-amber-200 text-amber-900 rounded-xl text-xs font-black shadow-sm cursor-pointer transition-all duration-200 active:scale-95"
+                  >
+                    💰 定期定額下單
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="relative overflow-hidden rounded-2xl border border-emerald-200/60 bg-emerald-50/50 backdrop-blur-md p-4 sm:p-5 shadow-lg shadow-emerald-500/5 transition-all duration-300 hover:shadow-emerald-500/10 hover:border-emerald-300">
+              <div 
+                className="absolute -inset-y-12 -inset-x-12 opacity-40 blur-xl pointer-events-none" 
+                style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)' }}
+              />
+              
+              <div className="relative flex items-center gap-3">
+                <div className="p-2 bg-emerald-100/80 text-emerald-600 rounded-xl flex-shrink-0 shadow-inner">
+                  <CheckCircle className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-emerald-950 flex items-center gap-1.5">
+                    🛡️ Safe Guard 黃金防禦守護中
+                  </h3>
+                  <p className="text-xs text-emerald-800/90 font-bold mt-0.5">
+                    恭喜！您當前的組合配置已完美維持在 ±5% 黃金安全護欄內。
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 偏離警告橫幅 */}
       {deviationAlertMessage && (
