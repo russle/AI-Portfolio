@@ -8,6 +8,7 @@ import { RetirementPage } from './pages/RetirementPage';
 import { OrderPage } from './pages/OrderPage';
 import { ScenarioPage } from './pages/ScenarioPage';
 import { BacktestPage } from './pages/BacktestPage';
+import { FamilyPlanner } from './pages/FamilyPlanner';
 import { 
   PieChart, 
   Database, 
@@ -20,7 +21,8 @@ import {
   Menu, 
   X,
   DollarSign,
-  History
+  History,
+  Users
 } from 'lucide-react';
 
 // 全站 Navbar 導航與狀態燈元件
@@ -56,6 +58,7 @@ const Navbar: React.FC = () => {
     { to: '/allocation', label: '目標配置', icon: <Percent className="w-4 h-4" /> },
     { to: '/rebalance', label: '配置平衡', icon: <Scale className="w-4 h-4" /> },
     { to: '/retirement', label: '退休規劃', icon: <TrendingUp className="w-4 h-4" /> },
+    { to: '/family', label: '家庭規劃', icon: <Users className="w-4 h-4" /> },
     { to: '/order', label: '下單股數', icon: <DollarSign className="w-4 h-4" /> },
     { to: '/backtest', label: '歷史回測', icon: <History className="w-4 h-4" /> },
     { to: '/scenario', label: '壓力測試', icon: <ShieldAlert className="w-4 h-4" /> },
@@ -185,6 +188,7 @@ const MobileTabBar: React.FC = () => {
     { to: '/allocation', label: '配置', icon: <Percent className="w-5 h-5" /> },
     { to: '/rebalance', label: '平衡', icon: <Scale className="w-5 h-5" /> },
     { to: '/retirement', label: '退休', icon: <TrendingUp className="w-5 h-5" /> },
+    { to: '/family', label: '家庭', icon: <Users className="w-5 h-5" /> },
     { to: '/order', label: '下單', icon: <DollarSign className="w-5 h-5" /> },
     { to: '/backtest', label: '回測', icon: <History className="w-5 h-5" /> },
     { to: '/scenario', label: '壓測', icon: <ShieldAlert className="w-5 h-5" /> },
@@ -227,6 +231,7 @@ export const AppContent: React.FC = () => {
           <Route path="/allocation" element={<AllocationPage />} />
           <Route path="/rebalance" element={<RebalancePage />} />
           <Route path="/retirement" element={<RetirementPage />} />
+          <Route path="/family" element={<FamilyPlanner />} />
           <Route path="/order" element={<OrderPage />} />
           <Route path="/scenario" element={<ScenarioPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
