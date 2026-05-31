@@ -8,11 +8,8 @@ import {
   runMonteCarloSimulation as runMonteCarlo, 
   assessRetirementFeasibility as assessFeasibility, 
   runFullLifeMonteCarloSimulation,
-  runRetirementCrisisBacktest, // [NEW] 引入危機回測
-  runJointFullLifeMonteCarloSimulation,
-  assessJointRetirementFeasibility
+  runRetirementCrisisBacktest // [NEW] 引入危機回測
 } from '../utils/retirement';
-import type { JointFeasibilityResult } from '../utils/retirement';
 import { calculateSpendingForDieToZero } from '../utils/formulas';
 import { AlertTriangle } from 'lucide-react';
 
@@ -29,16 +26,6 @@ export const RetirementPage: React.FC = () => {
 
   // [NEW] 生命週期動態 Glide Path 配置開關
   const [enableGlidePath, setEnableGlidePath] = useState<boolean>(false);
-
-  // [NEW] 夫妻雙核心退休規劃沙盒 Local State
-  const [retirementMode, setRetirementMode] = useState<'individual' | 'joint'>('individual');
-  const [spouseAge, setSpouseAge] = useState<number>(Math.max(18, retirement.age - 2));
-  const [spouseRetireAge, setSpouseRetireAge] = useState<number>(60);
-  const [spouseLifeExpectancy, setSpouseLifeExpectancy] = useState<number>(Math.max(85, (retirement.age - 2) + 5));
-  const [spouseMonthlySpending, setSpouseMonthlySpending] = useState<number>(30000);
-  const [spousePassiveIncome, setSpousePassiveIncome] = useState<number>(15000);
-  const [jointFamilySpending, setJointFamilySpending] = useState<number>(20000);
-  const [memberAPassiveIncome, setMemberAPassiveIncome] = useState<number>(15000);
 
   // 全球股市說明：股債配置是以全球股市來估算
   const globalMarketNote = "本系統之股債配置預估報酬率，是以全球股市（例如 MSCI ACWI 指數）及全球債券 market 之長期歷史年化回報率為估算基礎。全球股市在過去數十年間的年化回報率約為 7%~8%，投資組合會依據您的股債比例調和出對應的預期報酬率。";
@@ -94,62 +81,6 @@ export const RetirementPage: React.FC = () => {
     }
   }, [withdrawalRule, retirement.life_expectancy]);
 
-  // [NEW] 執行夫妻雙核心退休模擬運算 (Four-Stage Decumulation Monte Carlo Algorithm Decision)
-  const jointFullLifeResult = useMemo(() => {
-    return runJointFullLifeMonteCarloSimulation({
-      memberA: {
-        currentAge: retirement.age,
-        retireAge: targetRetirementAge,
-        maxAge: retirement.life_expectancy ?? 85,
-        monthlySpending: retirement.monthly_spending,
-        passiveIncome: memberAPassiveIncome
-      },
-      memberB: {
-        currentAge: spouseAge,
-        retireAge: spouseRetireAge,
-        maxAge: spouseLifeExpectancy,
-        monthlySpending: spouseMonthlySpending,
-        passiveIncome: spousePassiveIncome
-      },
-      jointSpending: jointFamilySpending,
-      initialAsset: currentAsset,
-      monthlyInvest: retirement.monthly_invest,
-      expectedReturn: retirement.expected_return,
-      std: 0.15,
-      inflation: retirement.inflation,
-      enableGlidePath,
-      enableSpendingSmile: !!retirement.spending_smile
-    });
-  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, memberAPassiveIncome, spouseAge, spouseRetireAge, spouseLifeExpectancy, spouseMonthlySpending, spousePassiveIncome, jointFamilySpending, enableGlidePath, retirement.spending_smile]);
-
-  // [NEW] 執行夫妻雙核心退休可行性評估
-  const jointFeasibilityAges = useMemo(() => {
-    return assessJointRetirementFeasibility({
-      memberA: {
-        currentAge: retirement.age,
-        retireAge: targetRetirementAge,
-        maxAge: retirement.life_expectancy ?? 85,
-        monthlySpending: retirement.monthly_spending,
-        passiveIncome: memberAPassiveIncome
-      },
-      memberB: {
-        currentAge: spouseAge,
-        retireAge: spouseRetireAge,
-        maxAge: spouseLifeExpectancy,
-        monthlySpending: spouseMonthlySpending,
-        passiveIncome: spousePassiveIncome
-      },
-      jointSpending: jointFamilySpending,
-      initialAsset: currentAsset,
-      monthlyInvest: retirement.monthly_invest,
-      expectedReturn: retirement.expected_return,
-      std: 0.15,
-      inflation: retirement.inflation,
-      enableGlidePath,
-      enableSpendingSmile: !!retirement.spending_smile
-    });
-  }, [currentAsset, retirement.monthly_invest, retirement.age, targetRetirementAge, retirement.expected_return, retirement.inflation, retirement.monthly_spending, memberAPassiveIncome, spouseAge, spouseRetireAge, spouseLifeExpectancy, spouseMonthlySpending, spousePassiveIncome, jointFamilySpending, enableGlidePath, retirement.spending_smile]);
-
   // 執行全生命週期（累積期 + 提領消耗期）的蒙地卡羅隨機模擬
   const fullLifeResult = useMemo(() => {
     const strategy = withdrawalRule === 'four_percent' ? 'four_percent' :
@@ -176,38 +107,21 @@ export const RetirementPage: React.FC = () => {
   // 將全生命週期蒙地卡羅結果轉換成 Recharts 格式
   const chartData = useMemo(() => {
     const data = [];
-    if (retirementMode === 'joint') {
-      const yearsArray = jointFullLifeResult.yearsArray;
-      const yearsArrayB = jointFullLifeResult.yearsArrayB;
-      const p5 = jointFullLifeResult.p5;
-      const p50 = jointFullLifeResult.p50;
-      const p95 = jointFullLifeResult.p95;
+    const yearsArray = fullLifeResult.yearsArray;
+    const p5 = fullLifeResult.p5;
+    const p50 = fullLifeResult.p50;
+    const p95 = fullLifeResult.p95;
 
-      for (let i = 0; i < yearsArray.length; i++) {
-        data.push({
-          year: `${yearsArray[i]} / ${yearsArrayB[i]} 歲`,
-          p5: p5[i],
-          p50: p50[i],
-          p95: p95[i],
-        });
-      }
-    } else {
-      const yearsArray = fullLifeResult.yearsArray;
-      const p5 = fullLifeResult.p5;
-      const p50 = fullLifeResult.p50;
-      const p95 = fullLifeResult.p95;
-
-      for (let i = 0; i < yearsArray.length; i++) {
-        data.push({
-          year: `${yearsArray[i]} 歲`,
-          p5: p5[i],
-          p50: p50[i],
-          p95: p95[i],
-        });
-      }
+    for (let i = 0; i < yearsArray.length; i++) {
+      data.push({
+        year: `${yearsArray[i]} 歲`,
+        p5: p5[i],
+        p50: p50[i],
+        p95: p95[i],
+      });
     }
     return data;
-  }, [retirementMode, fullLifeResult, jointFullLifeResult]);
+  }, [fullLifeResult]);
 
   // 退休可行性評估
   const feasibilityAges = useMemo(() => {
@@ -235,10 +149,6 @@ export const RetirementPage: React.FC = () => {
     );
     return res.successRate;
   }, [currentAsset, retirement.monthly_invest, simulationYears, retirement.expected_return, retirement.inflation, fireTarget]);
-
-  // 夫妻 / 個人模式動態成功率與最終結果連動
-  const finalSuccessRate = retirementMode === 'joint' ? jointFullLifeResult.successRate : retireSuccessRate;
-  const activeFullLifeResult = retirementMode === 'joint' ? jointFullLifeResult : fullLifeResult;
 
   // 當提領法則為 Die to Zero 時，動態計算退休後每月可支配金額
   const dieToZeroResult = useMemo(() => {
@@ -343,445 +253,167 @@ export const RetirementPage: React.FC = () => {
           <div className="space-y-6">
             <h3 className="font-bold text-slate-700 text-sm tracking-wide border-b border-slate-100 pb-3">退休規劃設定</h3>
             
-            {/* 👤 個人 / 👩‍❤️‍👨 夫妻 雙軌切換毛玻璃按鈕 */}
-            <div className="flex bg-slate-100 p-0.5 rounded-xl border border-slate-200/50 text-xs font-bold mb-4">
-              <button
-                type="button"
-                onClick={() => setRetirementMode('individual')}
-                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  retirementMode === 'individual'
-                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200/20'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                👤 個人模式
-              </button>
-              <button
-                type="button"
-                onClick={() => setRetirementMode('joint')}
-                className={`flex-1 py-2 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  retirementMode === 'joint'
-                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200/20'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                👩‍❤️‍👨 夫妻模式
-              </button>
-            </div>
-
-            {retirementMode === 'joint' ? (
-              <div className="space-y-4 animate-fade-in">
-                {/* 成員 A 面板 (本人) */}
-                <div className="bg-white/40 backdrop-blur-sm p-4 rounded-xl border border-slate-200/60 space-y-3 shadow-inner">
-                  <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider block">👤 成員 A (本人) 設定</span>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">目前年齡</label>
-                      <input
-                        type="number"
-                        value={retirement.age}
-                        onChange={(e) => updateRetirementConfig('age', parseInt(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="18"
-                        max="100"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">預計退休</label>
-                      <input
-                        type="number"
-                        value={targetRetirementAge}
-                        onChange={(e) => setTargetRetirementAge(Math.max(retirement.age + 1, parseInt(e.target.value) || 0))}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min={retirement.age + 1}
-                        max="100"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">預估壽命</label>
-                      <input
-                        type="number"
-                        value={retirement.life_expectancy ?? 85}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          const minAllowed = retirement.age + 5;
-                          const constrained = Math.min(120, Math.max(minAllowed, val));
-                          updateRetirementConfig('life_expectancy', constrained);
-                        }}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min={retirement.age + 5}
-                        max="120"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">個人支出/月</label>
-                      <input
-                        type="number"
-                        value={retirement.monthly_spending}
-                        onChange={(e) => updateRetirementConfig('monthly_spending', parseInt(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="0"
-                        step="1000"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">退休被動收入/月 (TWD)</label>
-                    <input
-                      type="number"
-                      value={memberAPassiveIncome}
-                      onChange={(e) => setMemberAPassiveIncome(parseInt(e.target.value) || 0)}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="0"
-                      step="1000"
-                    />
-                  </div>
-                </div>
-
-                {/* 成員 B 面板 (配偶) */}
-                <div className="bg-white/40 backdrop-blur-sm p-4 rounded-xl border border-slate-200/60 space-y-3 shadow-inner">
-                  <span className="text-[10px] font-black text-rose-600 uppercase tracking-wider block">👩‍❤️‍👨 成員 B (配偶) 設定</span>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">目前年齡</label>
-                      <input
-                        type="number"
-                        value={spouseAge}
-                        onChange={(e) => setSpouseAge(parseInt(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="18"
-                        max="100"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">預計退休</label>
-                      <input
-                        type="number"
-                        value={spouseRetireAge}
-                        onChange={(e) => setSpouseRetireAge(Math.max(spouseAge + 1, parseInt(e.target.value) || 0))}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min={spouseAge + 1}
-                        max="100"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">預估壽命</label>
-                      <input
-                        type="number"
-                        value={spouseLifeExpectancy}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          const minAllowed = spouseAge + 5;
-                          const constrained = Math.min(120, Math.max(minAllowed, val));
-                          setSpouseLifeExpectancy(constrained);
-                        }}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min={spouseAge + 5}
-                        max="120"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">個人支出/月</label>
-                      <input
-                        type="number"
-                        value={spouseMonthlySpending}
-                        onChange={(e) => setSpouseMonthlySpending(parseInt(e.target.value) || 0)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="0"
-                        step="1000"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">退休被動收入/月 (TWD)</label>
-                    <input
-                      type="number"
-                      value={spousePassiveIncome}
-                      onChange={(e) => setSpousePassiveIncome(parseInt(e.target.value) || 0)}
-                      className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="0"
-                      step="1000"
-                    />
-                  </div>
-                </div>
-
-                {/* 🏡 家庭共同月支出 */}
-                <div className="bg-slate-50/50 p-4 rounded-xl border border-slate-200/50 space-y-2 shadow-inner">
-                  <label className="text-[10px] font-bold text-slate-500 block">🏡 家庭共同月開銷 (TWD)</label>
+            <div className="space-y-4">
+              {/* 年齡 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">目前年齡</label>
                   <input
                     type="number"
-                    value={jointFamilySpending}
-                    onChange={(e) => setJointFamilySpending(parseInt(e.target.value) || 0)}
+                    value={retirement.age}
+                    onChange={(e) => updateRetirementConfig('age', parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                    min="0"
-                    step="1000"
+                    min="18"
+                    max="100"
                   />
-                  <span className="text-[9px] text-slate-400 font-medium block leading-normal">
-                    💡 指房租、房貸、水電等家庭共同承擔之退休開銷，只要有一方退休即開始計算。
-                  </span>
                 </div>
-
-                {/* 共同儲蓄與投資參數 */}
-                <div className="bg-slate-50/30 p-4 rounded-xl border border-slate-200/30 space-y-3">
-                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">💰 家庭儲蓄與市場參數</span>
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 block mb-1">家庭每月持續投入投資額 (TWD)</label>
-                    <input
-                      type="number"
-                      value={retirement.monthly_invest}
-                      onChange={(e) => updateRetirementConfig('monthly_invest', parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="0"
-                      step="1000"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">年化報酬 (%)</label>
-                      <input
-                        type="number"
-                        value={(retirement.expected_return * 100).toFixed(1)}
-                        onChange={(e) => updateRetirementConfig('expected_return', (parseFloat(e.target.value) || 0) / 100)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="0"
-                        max="30"
-                        step="0.1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">通貨膨脹 (%)</label>
-                      <input
-                        type="number"
-                        value={(retirement.inflation * 100).toFixed(1)}
-                        onChange={(e) => updateRetirementConfig('inflation', (parseFloat(e.target.value) || 0) / 100)}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="0"
-                        max="15"
-                        step="0.1"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="text-[10px] font-bold text-slate-400 block mb-1">席勒本益比 (CAPE)</label>
-                      <input
-                        type="number"
-                        value={retirement.cape_ratio ?? 30}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0;
-                          updateRetirementConfig('cape_ratio', Math.min(50, Math.max(10, val)));
-                        }}
-                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                        min="10"
-                        max="50"
-                      />
-                    </div>
-                    <div className="flex flex-col justify-end">
-                      <label className="text-[10px] font-bold text-slate-400 block mb-2">開銷微笑曲線</label>
-                      <label className="relative inline-flex items-center cursor-pointer select-none">
-                        <input
-                          type="checkbox"
-                          checked={!!retirement.spending_smile}
-                          onChange={(e) => updateRetirementConfig('spending_smile', e.target.checked ? 1 : 0)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                        <span className="ml-1.5 text-[10px] font-bold text-slate-500 peer-checked:text-blue-600 font-mono">
-                          {retirement.spending_smile ? '已啟用 ✨' : '關閉'}
-                        </span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-100 mt-2">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-700 block">生命週期 Glide Path</label>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer select-none ml-2 shrink-0">
-                        <input
-                          type="checkbox"
-                          checked={enableGlidePath}
-                          onChange={(e) => setEnableGlidePath(e.target.checked)}
-                          className="sr-only peer"
-                        />
-                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                        <span className="ml-1.5 text-[10px] font-bold text-slate-500 peer-checked:text-blue-600 min-w-8 text-center font-mono">
-                          {enableGlidePath ? '啟用' : '關閉'}
-                        </span>
-                      </label>
-                    </div>
-                  </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">預計退休年齡</label>
+                  <input
+                    type="number"
+                    value={targetRetirementAge}
+                    onChange={(e) => setTargetRetirementAge(Math.max(retirement.age + 1, parseInt(e.target.value) || 0))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                    min={retirement.age + 1}
+                    max="100"
+                  />
                 </div>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {/* 年齡 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">目前年齡</label>
-                    <input
-                      type="number"
-                      value={retirement.age}
-                      onChange={(e) => updateRetirementConfig('age', parseInt(e.target.value) || 0)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="18"
-                      max="100"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">預計退休年齡</label>
-                    <input
-                      type="number"
-                      value={targetRetirementAge}
-                      onChange={(e) => setTargetRetirementAge(Math.max(retirement.age + 1, parseInt(e.target.value) || 0))}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min={retirement.age + 1}
-                      max="100"
-                    />
-                  </div>
-                </div>
 
-                {/* 預估壽命 */}
+              {/* 預估壽命 */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1">個人預估壽命 (Life Expectancy)</label>
+                <input
+                  type="number"
+                  value={retirement.life_expectancy ?? 85}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    // 動態雙向安全護欄：目前年齡 + 5 ~ 120 歲
+                    const minAllowed = retirement.age + 5;
+                    const constrained = Math.min(120, Math.max(minAllowed, val));
+                    updateRetirementConfig('life_expectancy', constrained);
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 font-mono"
+                  min={retirement.age + 5}
+                  max="120"
+                />
+                <span className="text-[9px] text-slate-400 font-medium block mt-1 leading-normal">
+                  💡 長壽精算終點，影響提領年數與年金均攤（防禦範圍：{retirement.age + 5} ~ 120 歲）。
+                </span>
+              </div>
+
+              {/* 每月開銷 */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1">預估退休後每月支出 (TWD)</label>
+                <input
+                  type="number"
+                  value={retirement.monthly_spending}
+                  onChange={(e) => updateRetirementConfig('monthly_spending', parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                  min="0"
+                  step="1000"
+                />
+              </div>
+
+              {/* 每月投資 */}
+              <div>
+                <label className="text-xs font-bold text-slate-400 block mb-1">每月持續投入投資額 (TWD)</label>
+                <input
+                  type="number"
+                  value={retirement.monthly_invest}
+                  onChange={(e) => updateRetirementConfig('monthly_invest', parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                  min="0"
+                  step="1000"
+                />
+              </div>
+
+              {/* 預估報酬與通膨 */}
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1">個人預估壽命 (Life Expectancy)</label>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">年化報酬率 (%)</label>
                   <input
                     type="number"
-                    value={retirement.life_expectancy ?? 85}
+                    value={(retirement.expected_return * 100).toFixed(1)}
+                    onChange={(e) => updateRetirementConfig('expected_return', (parseFloat(e.target.value) || 0) / 100)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                    min="0"
+                    max="30"
+                    step="0.1"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">通貨膨脹率 (%)</label>
+                  <input
+                    type="number"
+                    value={(retirement.inflation * 100).toFixed(1)}
+                    onChange={(e) => updateRetirementConfig('inflation', (parseFloat(e.target.value) || 0) / 100)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
+                    min="0"
+                    max="15"
+                    step="0.1"
+                  />
+                </div>
+              </div>
+
+              {/* CAPE 與 微笑曲線 */}
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div>
+                  <label className="text-xs font-bold text-slate-400 block mb-1">席勒本益比 (CAPE)</label>
+                  <input
+                    type="number"
+                    value={retirement.cape_ratio ?? 30}
                     onChange={(e) => {
                       const val = parseInt(e.target.value) || 0;
-                      // 動態雙向安全護欄：目前年齡 + 5 ~ 120 歲
-                      const minAllowed = retirement.age + 5;
-                      const constrained = Math.min(120, Math.max(minAllowed, val));
-                      updateRetirementConfig('life_expectancy', constrained);
+                      // 限制在 10 ~ 50 之間以防禦隨機溢出
+                      updateRetirementConfig('cape_ratio', Math.min(50, Math.max(10, val)));
                     }}
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 font-mono"
-                    min={retirement.age + 5}
-                    max="120"
-                  />
-                  <span className="text-[9px] text-slate-400 font-medium block mt-1 leading-normal">
-                    💡 長壽精算終點，影響提領年數與年金均攤（防禦範圍：{retirement.age + 5} ~ 120 歲）。
-                  </span>
-                </div>
-
-                {/* 每月開銷 */}
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1">預估退休後每月支出 (TWD)</label>
-                  <input
-                    type="number"
-                    value={retirement.monthly_spending}
-                    onChange={(e) => updateRetirementConfig('monthly_spending', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                    min="0"
-                    step="1000"
+                    min="10"
+                    max="50"
                   />
                 </div>
-
-                {/* 每月投資 */}
-                <div>
-                  <label className="text-xs font-bold text-slate-400 block mb-1">每月持續投入投資額 (TWD)</label>
-                  <input
-                    type="number"
-                    value={retirement.monthly_invest}
-                    onChange={(e) => updateRetirementConfig('monthly_invest', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                    min="0"
-                    step="1000"
-                  />
-                </div>
-
-                {/* 預估報酬與通膨 */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">年化報酬率 (%)</label>
+                <div className="flex flex-col justify-end">
+                  <label className="text-xs font-bold text-slate-400 block mb-2">開銷微笑曲線</label>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
                     <input
-                      type="number"
-                      value={(retirement.expected_return * 100).toFixed(1)}
-                      onChange={(e) => updateRetirementConfig('expected_return', (parseFloat(e.target.value) || 0) / 100)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="0"
-                      max="30"
-                      step="0.1"
+                      type="checkbox"
+                      checked={!!retirement.spending_smile}
+                      onChange={(e) => updateRetirementConfig('spending_smile', e.target.checked ? 1 : 0)}
+                      className="sr-only peer"
                     />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">通貨膨脹率 (%)</label>
-                    <input
-                      type="number"
-                      value={(retirement.inflation * 100).toFixed(1)}
-                      onChange={(e) => updateRetirementConfig('inflation', (parseFloat(e.target.value) || 0) / 100)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500"
-                      min="0"
-                      max="15"
-                      step="0.1"
-                    />
-                  </div>
-                </div>
-
-                {/* CAPE 與 微笑曲線 */}
-                <div className="grid grid-cols-2 gap-4 pt-1">
-                  <div>
-                    <label className="text-xs font-bold text-slate-400 block mb-1">席勒本益比 (CAPE)</label>
-                    <input
-                      type="number"
-                      value={retirement.cape_ratio ?? 30}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value) || 0;
-                        // 限制在 10 ~ 50 之間以防禦隨機溢出
-                        updateRetirementConfig('cape_ratio', Math.min(50, Math.max(10, val)));
-                      }}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 font-mono"
-                      min="10"
-                      max="50"
-                    />
-                  </div>
-                  <div className="flex flex-col justify-end">
-                    <label className="text-xs font-bold text-slate-400 block mb-2">開銷微笑曲線</label>
-                    <label className="relative inline-flex items-center cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={!!retirement.spending_smile}
-                        onChange={(e) => updateRetirementConfig('spending_smile', e.target.checked ? 1 : 0)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 font-mono">
-                        {retirement.spending_smile ? '已啟用 ✨' : '已關閉'}
-                      </span>
-                    </label>
-                  </div>
-                </div>
-
-                {/* [NEW] 生命週期動態 Glide Path */}
-                <div className="pt-3.5 border-t border-slate-100 mt-2.5">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <label className="text-xs font-bold text-slate-700 block">生命週期動態 Glide Path</label>
-                      <span className="text-[10px] text-slate-400 font-semibold block leading-normal mt-0.5 max-w-[200px]">
-                        💡 隨模擬年齡增長自動線性調降高風險股權配比，大幅避免長壽資金耗盡歸零。
-                      </span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer select-none ml-2 shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={enableGlidePath}
-                        onChange={(e) => setEnableGlidePath(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 min-w-10 text-center font-mono">
-                        {enableGlidePath ? '已啟用 ✨' : '已關閉'}
-                      </span>
-                    </label>
-                  </div>
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 font-mono">
+                      {retirement.spending_smile ? '已啟用 ✨' : '已關閉'}
+                    </span>
+                  </label>
                 </div>
               </div>
-            )}
+
+              {/* [NEW] 生命週期動態 Glide Path */}
+              <div className="pt-3.5 border-t border-slate-100 mt-2.5">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <label className="text-xs font-bold text-slate-700 block">生命週期動態 Glide Path</label>
+                    <span className="text-[10px] text-slate-400 font-semibold block leading-normal mt-0.5 max-w-[200px]">
+                      💡 隨模擬年齡增長自動線性調降高風險股權配比，大幅避免長壽資金耗盡歸零。
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none ml-2 shrink-0">
+                    <input
+                      type="checkbox"
+                      checked={enableGlidePath}
+                      onChange={(e) => setEnableGlidePath(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-2 text-xs font-bold text-slate-500 peer-checked:text-blue-600 min-w-10 text-center font-mono">
+                      {enableGlidePath ? '已啟用 ✨' : '已關閉'}
+                    </span>
+                  </label>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div className="mt-6 pt-4 border-t border-slate-100 text-xs text-slate-400 leading-relaxed">
@@ -854,16 +486,12 @@ export const RetirementPage: React.FC = () => {
         {/* 右側：蒙地卡羅成功率儀表板 */}
         <Card className="p-6 lg:col-span-1 flex flex-col items-center justify-center">
           <Gauge 
-            value={finalSuccessRate} 
-            title={retirementMode === 'joint' ? '夫妻白頭偕老財務安全率' : `${targetRetirementAge} 歲退休成功機率`} 
+            value={retireSuccessRate} 
+            title={`${targetRetirementAge} 歲退休成功機率`} 
           />
           <div className="text-center mt-2 max-w-xs">
             <p className="text-xs text-slate-400 leading-relaxed">
-              {retirementMode === 'joint' ? (
-                <span>在結合夫妻兩人的生命週期中，經 1000 次蒙地卡羅四階段提領演算，有 <span className="font-bold text-slate-600">{(finalSuccessRate * 100).toFixed(0)}%</span> 的軌跡直到兩人都達預估壽命結束時，家庭資產依然安全（大於 0 元）。</span>
-              ) : (
-                <span>在 {simulationYears} 年的累積期中，經過 1000 次隨機複利演算，有 <span className="font-bold text-slate-600">{(finalSuccessRate * 100).toFixed(0)}%</span> 的軌跡最終累積資產超越了目標金額。</span>
-              )}
+              在 {simulationYears} 年的累積期中，經過 1000 次隨機複利演算，有 <span className="font-bold text-slate-600">{(retireSuccessRate * 100).toFixed(0)}%</span> 的軌跡最終累積資產超越了目標金額。
             </p>
           </div>
         </Card>
@@ -989,27 +617,27 @@ export const RetirementPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🔴 保守極端情況 (P5 軌跡)</span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-black text-slate-700">
-                {activeFullLifeResult.depletionAgeP5 
-                  ? `${activeFullLifeResult.depletionAgeP5} 歲花光` 
+                {fullLifeResult.depletionAgeP5 
+                  ? `${fullLifeResult.depletionAgeP5} 歲花光` 
                   : withdrawalRule === 'die_to_zero'
                     ? '🛡️ 被動動態重均攤'
                     : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2 font-medium">
-              {activeFullLifeResult.depletionAgeP5 
-                ? `在市場極度低迷情況下，資產預計於退休後 ${activeFullLifeResult.depletionAgeP5 - targetRetirementAge} 年內耗盡。` 
+              {fullLifeResult.depletionAgeP5 
+                ? `在市場極度低迷情況下，資產預計於退休後 ${fullLifeResult.depletionAgeP5 - targetRetirementAge} 年內耗盡。` 
                 : withdrawalRule === 'die_to_zero'
                   ? `💡 極端低迷行情下，資產絕不提前枯竭。但代價是您的生活費會被大盤暴跌【動態腰斬/收縮】，晚年實質生活水平將顯著調降。`
                   : `即使在極端低迷行情下，資產也能安全支撐至 ${retirement.life_expectancy ?? 85} 歲以上不枯竭。`}
             </p>
           </div>
           {/* 其他法則的剛性割肉破產警示 */}
-          {activeFullLifeResult.depletionAgeP5 && withdrawalRule === 'four_percent' ? (
+          {fullLifeResult.depletionAgeP5 && withdrawalRule === 'four_percent' ? (
             <div className="text-[10px] font-bold text-rose-600 bg-rose-500/10 px-2.5 py-1.5 rounded-lg border border-rose-500/20 mt-3">
               ⚠️ 剛性提領在熊市底部割肉賣股加速枯竭，建議考慮 GK 動態護欄或 CAPE 估值避險。
             </div>
-          ) : activeFullLifeResult.depletionAgeP5 ? (
+          ) : fullLifeResult.depletionAgeP5 ? (
             <div className="text-[10px] font-bold text-rose-500 bg-rose-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
               ⚠️ 長壽風險極高，建議追加儲蓄
             </div>
@@ -1026,18 +654,18 @@ export const RetirementPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🔵 中位期望情況 (P50 軌跡)</span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-black text-slate-700">
-                {activeFullLifeResult.depletionAgeP50 
-                  ? `${activeFullLifeResult.depletionAgeP50} 歲花光` 
+                {fullLifeResult.depletionAgeP50 
+                  ? `${fullLifeResult.depletionAgeP50} 歲花光` 
                   : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2">
-              {activeFullLifeResult.depletionAgeP50 
-                ? `符合平均市場表現下，資產預計於退休後 ${activeFullLifeResult.depletionAgeP50 - targetRetirementAge} 年內花光。` 
+              {fullLifeResult.depletionAgeP50 
+                ? `符合平均市場表現下，資產預計於退休後 ${fullLifeResult.depletionAgeP50 - targetRetirementAge} 年內花光。` 
                 : '平均市場表現下，資產非常安全，完全不會枯竭。'}
             </p>
           </div>
-          {activeFullLifeResult.depletionAgeP50 ? (
+          {fullLifeResult.depletionAgeP50 ? (
             <div className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
               💡 可延後 3~5 年退休以求資產永續
             </div>
@@ -1054,19 +682,19 @@ export const RetirementPage: React.FC = () => {
             <span className="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">🟢 樂觀上游情況 (P95 軌跡)</span>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-black text-slate-700">
-                {activeFullLifeResult.depletionAgeP95 
-                  ? `${activeFullLifeResult.depletionAgeP95} 歲花光` 
+                {fullLifeResult.depletionAgeP95 
+                  ? `${fullLifeResult.depletionAgeP95} 歲花光` 
                   : `🛡️ ${retirement.life_expectancy ?? 85}歲前安全無虞`}
               </span>
             </div>
             <p className="text-xs text-slate-400 leading-relaxed mt-2">
-              {activeFullLifeResult.depletionAgeP95 
-                ? `在市場繁榮的大牛市行情下，資產仍將於 ${activeFullLifeResult.depletionAgeP95} 歲花光。` 
+              {fullLifeResult.depletionAgeP95 
+                ? `在市場繁榮的大牛市行情下，資產仍將於 ${fullLifeResult.depletionAgeP95} 歲花光。` 
                 : `大牛市行情下，資產將呈爆發性增值，至 ${retirement.life_expectancy ?? 85} 歲仍留有龐大餘額。`}
             </p>
           </div>
           <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg mt-3 w-fit">
-            {activeFullLifeResult.depletionAgeP95 ? '📈 可享有更優渥的生活品質' : '💎 傳承子孫的資產非常豐厚'}
+            {fullLifeResult.depletionAgeP95 ? '📈 可享有更優渥的生活品質' : '💎 傳承子孫的資產非常豐厚'}
           </div>
         </Card>
       </div>
@@ -1098,99 +726,53 @@ export const RetirementPage: React.FC = () => {
       <Card className="overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50">
           <h3 className="font-bold text-slate-700 text-sm tracking-wide">黃金年齡退休可行性評估比較</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {retirementMode === 'joint' 
-              ? '預先為您試算雙方的目標退休年齡對 (成員 A / 成員 B) 下，家庭白頭偕老的財務安全成功率與期望中位數資產'
-              : '預先為您試算在 52、55、58、60 歲時分別退休的成功概率與期望中位數資產'}
-          </p>
+          <p className="text-xs text-slate-400 mt-0.5">預先為您試算在 52、55、58、60 歲時分別退休的成功概率與期望中位數資產</p>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-100 text-xs font-bold text-slate-400 uppercase bg-slate-50/30">
-                <th className="px-6 py-4">
-                  {retirementMode === 'joint' ? '目標退休年齡對 (A / B)' : '目標退休年齡'}
-                </th>
-                <th className="px-6 py-4 text-center">
-                  {retirementMode === 'joint' ? '剩餘奮鬥年數 (A / B)' : '剩餘奮鬥年數'}
-                </th>
+                <th className="px-6 py-4">目標退休年齡</th>
+                <th className="px-6 py-4 text-center">剩餘奮鬥年數</th>
                 <th className="px-6 py-4 text-center">蒙地卡羅成功機率</th>
                 <th className="px-6 py-4 text-right">期望中位數退休資產</th>
                 <th className="px-6 py-4 text-center">可行性評級</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/80 text-sm font-medium text-slate-600">
-              {retirementMode === 'joint' ? (
-                jointFeasibilityAges.map((item: JointFeasibilityResult) => {
-                  let badgeStyle = 'bg-rose-50 border-rose-200 text-rose-600';
-                  if (item.rating === '🟢 非常可行') {
-                    badgeStyle = 'bg-emerald-50 border-emerald-200 text-emerald-600';
-                  } else if (item.rating === '✅ 可行') {
-                    badgeStyle = 'bg-blue-50 border-blue-200 text-blue-600';
-                  } else if (item.rating === '⚠️ 勉強可行') {
-                    badgeStyle = 'bg-amber-50 border-amber-200 text-amber-600';
-                  }
+              {feasibilityAges.map((item) => {
+                let badgeStyle = 'bg-rose-50 border-rose-200 text-rose-600';
+                if (item.rating === '🟢 非常可行') {
+                  badgeStyle = 'bg-emerald-50 border-emerald-200 text-emerald-600';
+                } else if (item.rating === '✅ 可行') {
+                  badgeStyle = 'bg-blue-50 border-blue-200 text-blue-600';
+                } else if (item.rating === '⚠️ 勉強可行') {
+                  badgeStyle = 'bg-amber-50 border-amber-200 text-amber-600';
+                }
 
-                  const yearsA = Math.max(0, item.retireAgeA - retirement.age);
-                  const yearsB = Math.max(0, item.retireAgeB - spouseAge);
-
-                  return (
-                    <tr key={`${item.retireAgeA}-${item.retireAgeB}`} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-700">{item.retireAgeA} 歲 / {item.retireAgeB} 歲 退休</div>
-                      </td>
-                      <td className="px-6 py-4 text-center text-slate-500 font-semibold">
-                        {yearsA} 年 / {yearsB} 年
-                      </td>
-                      <td className="px-6 py-4 text-center font-bold text-slate-700">
-                        {(item.successRate * 100).toFixed(0)}%
-                      </td>
-                      <td className="px-6 py-4 text-right font-black text-slate-700">
-                        ${Math.round(item.expectedAsset).toLocaleString()} 元
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${badgeStyle}`}>
-                          {item.rating}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                feasibilityAges.map((item) => {
-                  let badgeStyle = 'bg-rose-50 border-rose-200 text-rose-600';
-                  if (item.rating === '🟢 非常可行') {
-                    badgeStyle = 'bg-emerald-50 border-emerald-200 text-emerald-600';
-                  } else if (item.rating === '✅ 可行') {
-                    badgeStyle = 'bg-blue-50 border-blue-200 text-blue-600';
-                  } else if (item.rating === '⚠️ 勉強可行') {
-                    badgeStyle = 'bg-amber-50 border-amber-200 text-amber-600';
-                  }
-
-                  return (
-                    <tr key={item.age} className="hover:bg-slate-50/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="font-bold text-slate-700">{item.age} 歲退休</div>
-                      </td>
-                      <td className="px-6 py-4 text-center text-slate-500 font-semibold">
-                        {item.years} 年
-                      </td>
-                      <td className="px-6 py-4 text-center font-bold text-slate-700">
-                        {(item.successRate * 100).toFixed(0)}%
-                      </td>
-                      <td className="px-6 py-4 text-right font-black text-slate-700">
-                        ${Math.round(item.expectedAsset).toLocaleString()} 元
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${badgeStyle}`}>
-                          {item.rating}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
+                return (
+                  <tr key={item.age} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="font-bold text-slate-700">{item.age} 歲退休</div>
+                    </td>
+                    <td className="px-6 py-4 text-center text-slate-500 font-semibold">
+                      {item.years} 年
+                    </td>
+                    <td className="px-6 py-4 text-center font-bold text-slate-700">
+                      {(item.successRate * 100).toFixed(0)}%
+                    </td>
+                    <td className="px-6 py-4 text-right font-black text-slate-700">
+                      ${Math.round(item.expectedAsset).toLocaleString()} 元
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold border ${badgeStyle}`}>
+                        {item.rating}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
