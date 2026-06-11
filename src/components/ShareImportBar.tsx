@@ -25,7 +25,7 @@ interface PortfolioShape {
   us_stock: number;
   crypto: number;
   history: unknown[];
-  holdings?: unknown[];
+  holdings?: HoldingItem[];
   isHoldingMode?: boolean;
 }
 
@@ -79,7 +79,23 @@ const validateImportedState = (data: Record<string, unknown>): data is Validated
   ) return false;
 
   // [NEW] 支持 holdings 明細陣列與持股模式欄位校驗
-  if (p.holdings !== undefined && !Array.isArray(p.holdings)) return false;
+  if (p.holdings !== undefined) {
+    if (!Array.isArray(p.holdings)) return false;
+    // Validate each holding item has required fields
+    for (const h of p.holdings) {
+      if (!h || typeof h !== 'object') return false;
+      const hItem = h as Record<string, unknown>;
+      if (
+        typeof hItem.id !== 'string' ||
+        typeof hItem.symbol !== 'string' ||
+        typeof hItem.name !== 'string' ||
+        typeof hItem.shares !== 'number' ||
+        typeof hItem.currentPrice !== 'number' ||
+        typeof hItem.currency !== 'string' ||
+        typeof hItem.assetType !== 'string'
+      ) return false;
+    }
+  }
   if (p.isHoldingMode !== undefined && typeof p.isHoldingMode !== 'boolean') return false;
 
   if (
