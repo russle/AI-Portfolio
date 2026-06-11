@@ -26,3 +26,6 @@ dist-ssr
 /playwright-report/
 .spectra/
 openspec/.vector-search.db*
+
+.codegraph/daemon.pid
+coverage/
