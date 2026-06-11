@@ -39,6 +39,7 @@ const Navbar: React.FC = () => {
   const { resetAll } = useApp();
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [desktopMoreOpen, setDesktopMoreOpen] = useState(false);
 
   // 監聽 localStorage 改變，模擬儲存成功
   useEffect(() => {
@@ -75,6 +76,9 @@ const Navbar: React.FC = () => {
     { to: '/stresstest', label: '脫水測試', icon: <FlaskConical className="w-4 h-4" /> },
   ];
 
+  const primaryMenuItems = menuItems.slice(0, 5);
+  const secondaryMenuItems = menuItems.slice(5);
+
   return (
     <nav className="sticky top-0 z-50 w-full backdrop-blur-md bg-white/85 border-b border-slate-200/80 shadow-sm transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -97,7 +101,7 @@ const Navbar: React.FC = () => {
 
           {/* 桌面端導航選單 */}
           <div className="hidden lg:flex items-center gap-1">
-            {menuItems.map((item) => (
+            {primaryMenuItems.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -113,6 +117,43 @@ const Navbar: React.FC = () => {
                 {item.label}
               </NavLink>
             ))}
+            {/* 桌面端更多按鈕 */}
+            <div className="relative">
+              <button
+                onClick={() => setDesktopMoreOpen(prev => !prev)}
+                className="flex items-center gap-1 px-3 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all select-none"
+              >
+                <MoreHorizontal className="w-4 h-4" />
+                更多
+              </button>
+              {desktopMoreOpen && (
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setDesktopMoreOpen(false)}
+                />
+              )}
+              {desktopMoreOpen && (
+                <div className="absolute top-full right-0 mt-1 z-20 bg-white border border-slate-200 rounded-xl shadow-xl p-2 min-w-[160px]">
+                  {secondaryMenuItems.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setDesktopMoreOpen(false)}
+                      className={({ isActive }) => `
+                        flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all select-none
+                        ${isActive
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                        }
+                      `}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 右側自動儲存狀態與重設 */}
