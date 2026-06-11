@@ -166,7 +166,7 @@ export const AllocationPage: React.FC = () => {
   const applyRiskMode = (modeKey: keyof typeof RISK_MODES) => {
     const newTarget = RISK_MODES[modeKey].target;
     updateAllocationTarget(newTarget);
-    syncInputsFromGlobal(newTarget as any);
+    syncInputsFromGlobal(newTarget);
   };
 
   const isHoldingMode = portfolio.isHoldingMode || false;

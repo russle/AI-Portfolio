@@ -133,7 +133,7 @@ const DEFAULT_STATE: AiPortfolioState = {
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
 
-const migrateHistory = (history: any[], currentPortfolio: Omit<Portfolio, 'history'>): PortfolioHistoryPoint[] => {
+const migrateHistory = (history: PortfolioHistoryPoint[], currentPortfolio: Omit<Portfolio, 'history'>): PortfolioHistoryPoint[] => {
   const currentSum = 
     currentPortfolio.cash + 
     currentPortfolio.fund + 

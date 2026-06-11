@@ -263,7 +263,7 @@ export const HoldingsManager: React.FC = () => {
                   <label className="block text-[10px] font-bold text-slate-400 mb-1">標的大類</label>
                   <select
                     value={assetType}
-                    onChange={(e) => setAssetType(e.target.value as any)}
+                    onChange={(e) => setAssetType(e.target.value as HoldingItem['assetType'])}
                     className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none"
                   >
                     <option value="tw_stock">🇹🇼 台灣股票</option>
@@ -324,7 +324,7 @@ export const HoldingsManager: React.FC = () => {
                     />
                     <select
                       value={currency}
-                      onChange={(e) => setCurrency(e.target.value as any)}
+                      onChange={(e) => setCurrency(e.target.value as 'TWD' | 'USD')}
                       className="px-2 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 focus:outline-none"
                     >
                       <option value="TWD">TWD</option>

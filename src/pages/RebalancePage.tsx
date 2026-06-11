@@ -81,7 +81,7 @@ export const RebalancePage: React.FC = () => {
             <Tabs 
               tabs={tabsConfig} 
               activeTab={activeTab} 
-              onChange={(id) => setActiveTab(id as any)} 
+              onChange={(id) => setActiveTab(id as 'exact' | 'cash' | 'threshold')} 
             />
           </div>
 

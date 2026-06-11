@@ -83,7 +83,7 @@ export const ScenarioPage: React.FC = () => {
       setProjectedState(state);
     } else {
       // 純函數拷貝運算，不污染全域
-      const nextState = runScenarioProjection(state, scenarioId as any);
+      const nextState = runScenarioProjection(state, scenarioId as 'market_drop' | 'us_bull' | 'fx_35' | 'inflation_5');
       setProjectedState(nextState);
     }
   };

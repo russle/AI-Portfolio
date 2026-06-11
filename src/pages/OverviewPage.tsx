@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState } from '../context/AppContext';
+import type { AiPortfolioState, PortfolioHistoryPoint } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { ProgressBar } from '../components/ProgressBar';
 import { LineChart } from '../components/LineChart';
@@ -43,7 +43,7 @@ import {
 } from '../utils/shareUtils';
 
 // 還原資料的欄位合法性校驗
-const validateImportedState = (data: any): boolean => {
+const validateImportedState = (data: Record<string, unknown>): boolean => {
   if (!data || typeof data !== 'object') return false;
   if (!data.portfolio || !data.allocation_target || !data.retirement) return false;
   
@@ -130,7 +130,7 @@ export const OverviewPage: React.FC = () => {
   };
 
   // 開啟 Modal（編輯模式）並載入快照數據
-  const openEditSnapshotModal = (point: any) => {
+  const openEditSnapshotModal = (point: PortfolioHistoryPoint) => {
     setModalMode('edit');
     setModalDate(point.date);
     setModalCash(point.cash ?? 0);

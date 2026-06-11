@@ -20,12 +20,14 @@ import {
   CartesianGrid,
   Tooltip,
 } from 'recharts';
+import type { TooltipContentProps } from 'recharts';
+import type { ValueType, NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 /* ------------------------------------------------------------------ */
 /*  Custom Chart Tooltip                                               */
 /* ------------------------------------------------------------------ */
 
-const CustomTooltip = ({ active, payload }: any) => {
+const CustomTooltip: React.FC<TooltipContentProps<ValueType, NameType>> = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
     return (

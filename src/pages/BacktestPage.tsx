@@ -31,6 +31,8 @@ import {
   ReferenceLine,
   Label
 } from 'recharts';
+import type { TooltipValueType } from 'recharts';
+import type { NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 export const BacktestPage: React.FC = () => {
   const { state } = useApp();
@@ -138,8 +140,8 @@ export const BacktestPage: React.FC = () => {
         setBacktestResult(res);
         setRollingResult(null);
       }
-    } catch (err: any) {
-      setError(err?.message || '回測執行失敗，請檢查標的代號或網路連線！');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '回測執行失敗，請檢查標的代號或網路連線！');
     } finally {
       setIsLoading(false);
     }
@@ -309,7 +311,7 @@ export const BacktestPage: React.FC = () => {
                   ].map((item) => (
                     <button
                       key={item.key}
-                      onClick={() => setRebalanceFreq(item.key as any)}
+                      onClick={() => setRebalanceFreq(item.key as 'none' | 'monthly' | 'yearly')}
                       className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
                         rebalanceFreq === item.key
                           ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
@@ -678,7 +680,7 @@ export const BacktestPage: React.FC = () => {
                       }}
                       itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                       labelStyle={{ fontSize: '10px', fontWeight: 'extrabold', color: '#94a3b8', marginBottom: '6px' }}
-                      formatter={(value: any, name: any) => {
+                      formatter={(value: TooltipValueType, name: NameType) => {
                         const formattedVal = formatCurrency(Number(value));
                         if (name === 'portfolioValue') return [formattedVal, '配置組合本利和'];
                         if (name === 'actualValue') return [formattedVal, '當前真實持股本利和'];

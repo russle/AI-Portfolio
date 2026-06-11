@@ -102,7 +102,7 @@ export const fetchLatestPrices = async (symbols: string[]): Promise<Record<strin
 
     if (contents && contents.quoteResponse && contents.quoteResponse.result) {
       const items = contents.quoteResponse.result;
-      items.forEach((item: any) => {
+      items.forEach((item: { symbol: string; regularMarketPrice?: number }) => {
         const price = item.regularMarketPrice;
         const origSymbol = missingSymbols.find(sym => formatSymbol(sym) === item.symbol);
         if (origSymbol && typeof price === 'number') {

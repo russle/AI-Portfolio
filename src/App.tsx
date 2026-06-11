@@ -1,17 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
-import { OverviewPage } from './pages/OverviewPage';
-import { AllocationPage } from './pages/AllocationPage';
-import { RebalancePage } from './pages/RebalancePage';
-import { RetirementPage } from './pages/RetirementPage';
-import { OrderPage } from './pages/OrderPage';
-import { ScenarioPage } from './pages/ScenarioPage';
-import { StressTestPage } from './pages/StressTestPage';
-import { BacktestPage } from './pages/BacktestPage';
-import { EfficientFrontierPage } from './pages/EfficientFrontierPage';
-import { FamilyPlanner } from './pages/FamilyPlanner';
 import { OnboardingWizard } from './components/OnboardingWizard';
+
+// 路由級 Code Splitting：每個頁面獨立 chunk，僅在首次造訪時載入
+const OverviewPage = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
+const AllocationPage = lazy(() => import('./pages/AllocationPage').then(m => ({ default: m.AllocationPage })));
+const RebalancePage = lazy(() => import('./pages/RebalancePage').then(m => ({ default: m.RebalancePage })));
+const RetirementPage = lazy(() => import('./pages/RetirementPage').then(m => ({ default: m.RetirementPage })));
+const OrderPage = lazy(() => import('./pages/OrderPage').then(m => ({ default: m.OrderPage })));
+const ScenarioPage = lazy(() => import('./pages/ScenarioPage').then(m => ({ default: m.ScenarioPage })));
+const StressTestPage = lazy(() => import('./pages/StressTestPage').then(m => ({ default: m.StressTestPage })));
+const BacktestPage = lazy(() => import('./pages/BacktestPage').then(m => ({ default: m.BacktestPage })));
+const EfficientFrontierPage = lazy(() => import('./pages/EfficientFrontierPage').then(m => ({ default: m.EfficientFrontierPage })));
+const FamilyPlanner = lazy(() => import('./pages/FamilyPlanner').then(m => ({ default: m.FamilyPlanner })));
 import { 
   PieChart, 
   Database, 
@@ -234,20 +236,29 @@ export const AppContent: React.FC = () => {
       <Navbar />
       <OnboardingWizard />
 
-      {/* 核心多路由頁面渲染區 */}
+      {/* 核心多路由頁面渲染區（lazy loading + Suspense） */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8">
-        <Routes>
-          <Route path="/" element={<OverviewPage />} />
-          <Route path="/allocation" element={<AllocationPage />} />
-          <Route path="/rebalance" element={<RebalancePage />} />
-          <Route path="/retirement" element={<RetirementPage />} />
-          <Route path="/family" element={<FamilyPlanner />} />
-          <Route path="/order" element={<OrderPage />} />
-          <Route path="/scenario" element={<ScenarioPage />} />
-          <Route path="/stresstest" element={<StressTestPage />} />
-          <Route path="/backtest" element={<BacktestPage />} />
-          <Route path="/frontier" element={<EfficientFrontierPage />} />
-        </Routes>
+        <Suspense fallback={
+          <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs font-bold text-slate-400 animate-pulse">載入中...</p>
+            </div>
+          </div>
+        }>
+          <Routes>
+            <Route path="/" element={<OverviewPage />} />
+            <Route path="/allocation" element={<AllocationPage />} />
+            <Route path="/rebalance" element={<RebalancePage />} />
+            <Route path="/retirement" element={<RetirementPage />} />
+            <Route path="/family" element={<FamilyPlanner />} />
+            <Route path="/order" element={<OrderPage />} />
+            <Route path="/scenario" element={<ScenarioPage />} />
+            <Route path="/stresstest" element={<StressTestPage />} />
+            <Route path="/backtest" element={<BacktestPage />} />
+            <Route path="/frontier" element={<EfficientFrontierPage />} />
+          </Routes>
+        </Suspense>
       </main>
 
       {/* 行動端底部 Tab Bar 導航（淡出 lg 更大設備） */}

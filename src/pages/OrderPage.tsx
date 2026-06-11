@@ -73,7 +73,7 @@ export const OrderPage: React.FC = () => {
   }, [portfolio, allocation_target, orderMode, newCash, usdFxRate]);
 
   // 修改特定資產的單價或標的名稱
-  const handleConfigChange = (key: string, field: keyof AssetOrderConfig, value: any) => {
+  const handleConfigChange = (key: string, field: keyof AssetOrderConfig, value: string | number) => {
     setOrderConfigs(prev => ({
       ...prev,
       [key]: {
@@ -283,7 +283,7 @@ export const OrderPage: React.FC = () => {
                         />
                         <select
                           value={config.currency}
-                          onChange={(e) => handleConfigChange(key, 'currency', e.target.value as any)}
+                          onChange={(e) => handleConfigChange(key, 'currency', e.target.value as 'TWD' | 'USD')}
                           className="px-2 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-600 bg-white focus:outline-none"
                         >
                           <option value="TWD">TWD</option>

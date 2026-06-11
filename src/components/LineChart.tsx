@@ -9,6 +9,8 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
+import type { TooltipValueType } from 'recharts';
+import type { NameType, Payload as TooltipPayloadEntry } from 'recharts/types/component/DefaultTooltipContent';
 
 interface ChartLineConfig {
   key: string;
@@ -18,7 +20,7 @@ interface ChartLineConfig {
 }
 
 interface LineChartProps {
-  data: any[];
+  data: Record<string, number | string>[];
   xKey: string;
   lines: ChartLineConfig[];
   height?: number;
@@ -86,8 +88,8 @@ export const LineChart: React.FC<LineChartProps> = ({
             }}
             itemStyle={{ fontSize: '12px', fontWeight: 'bold' }}
             labelStyle={{ fontSize: '11px', fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
-            formatter={(value: any) => [`$${Number(value).toLocaleString()} 元`]}
-            itemSorter={(item: any) => {
+            formatter={(value: TooltipValueType) => [`$${Number(value).toLocaleString()} 元`]}
+            itemSorter={(item: TooltipPayloadEntry) => {
               const index = lines.findIndex(l => l.key === item.dataKey);
               return index !== -1 ? index : 999;
             }}
