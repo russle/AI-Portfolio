@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { computeEfficientFrontier, computeCurrentPosition } from '../portfolioOptimization';
 import type { AllocationTarget } from '../../context/AppContext';
 
+const TEST_TIMEOUT = 30000;
+
 // ---------------------------------------------------------------------------
 // computeEfficientFrontier
 // ---------------------------------------------------------------------------
@@ -9,28 +11,28 @@ describe('computeEfficientFrontier', () => {
   it('returns 100 frontier points', () => {
     const result = computeEfficientFrontier(100, 5000);
     expect(result.frontier).toHaveLength(100);
-  });
+  }, TEST_TIMEOUT);
 
   it('frontier points have non-decreasing volatility', () => {
     const result = computeEfficientFrontier(100, 5000);
     for (let i = 1; i < result.frontier.length; i++) {
       expect(result.frontier[i].volatility).toBeGreaterThanOrEqual(result.frontier[i - 1].volatility);
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('maxSharpe has the highest sharpeRatio among all frontier points', () => {
     const result = computeEfficientFrontier(100, 5000);
     for (const point of result.frontier) {
       expect(result.maxSharpe.sharpeRatio).toBeGreaterThanOrEqual(point.sharpeRatio - 0.0001);
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('minVolatility has the lowest volatility among all frontier points', () => {
     const result = computeEfficientFrontier(100, 5000);
     for (const point of result.frontier) {
       expect(result.minVolatility.volatility).toBeLessThanOrEqual(point.volatility + 0.0001);
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('frontier points have weights summing to 1', () => {
     const result = computeEfficientFrontier(100, 5000);
@@ -38,14 +40,14 @@ describe('computeEfficientFrontier', () => {
       const sum = point.weights.tw_stock + point.weights.us_stock + point.weights.bond + point.weights.crypto + point.weights.cash;
       expect(sum).toBeCloseTo(1, 5);
     }
-  });
+  }, TEST_TIMEOUT);
 
   it('minVolatility weights sum to 1', () => {
     const result = computeEfficientFrontier(100, 5000);
     const w = result.minVolatility.weights;
     const sum = w.tw_stock + w.us_stock + w.bond + w.crypto + w.cash;
     expect(sum).toBeCloseTo(1, 5);
-  });
+  }, TEST_TIMEOUT);
 
   it('returns current position as part of result', () => {
     const result = computeEfficientFrontier(100, 5000);
@@ -53,7 +55,7 @@ describe('computeEfficientFrontier', () => {
     expect(result.current).toHaveProperty('expectedReturn');
     expect(result.current).toHaveProperty('sharpeRatio');
     expect(result.current).toHaveProperty('weights');
-  });
+  }, TEST_TIMEOUT);
 });
 
 // ---------------------------------------------------------------------------

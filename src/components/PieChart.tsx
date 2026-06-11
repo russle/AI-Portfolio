@@ -7,7 +7,6 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import type { TooltipPayloadEntry } from 'recharts';
 
 interface PieData {
   name: string;

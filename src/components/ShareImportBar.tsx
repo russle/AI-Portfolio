@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState, Portfolio, AllocationTarget, RetirementConfig, HoldingItem } from '../context/AppContext';
+import type { AiPortfolioState, HoldingItem } from '../context/AppContext';
 import {
   encodeStateToUrl,
   buildShareUrl,
@@ -48,42 +48,57 @@ interface RetirementShape {
   spending_smile: boolean;
 }
 
-const validateImportedState = (data: Record<string, unknown>): data is { portfolio: PortfolioShape; allocation_target: AllocationTargetShape; retirement: RetirementShape } => {
-  if (!data || typeof data !== 'object') return false;
-  if (!data.portfolio || !data.allocation_target || !data.retirement) return false;
+type ValidatedState = {
+  portfolio: PortfolioShape;
+  allocation_target: AllocationTargetShape;
+  retirement: RetirementShape;
+};
 
-  const { portfolio, allocation_target, retirement } = data;
+const validateImportedState = (data: Record<string, unknown>): data is ValidatedState => {
+  if (!data || typeof data !== 'object') return false;
+  
+  const portfolio = data.portfolio;
+  const allocation_target = data.allocation_target;
+  const retirement = data.retirement;
+  
+  if (!portfolio || typeof portfolio !== 'object') return false;
+  if (!allocation_target || typeof allocation_target !== 'object') return false;
+  if (!retirement || typeof retirement !== 'object') return false;
+
+  const p = portfolio as Record<string, unknown>;
+  const a = allocation_target as Record<string, unknown>;
+  const r = retirement as Record<string, unknown>;
 
   if (
-    typeof portfolio.cash !== 'number' ||
-    typeof portfolio.fund !== 'number' ||
-    typeof portfolio.tw_stock !== 'number' ||
-    typeof portfolio.us_stock !== 'number' ||
-    typeof portfolio.crypto !== 'number' ||
-    !Array.isArray(portfolio.history)
+    typeof p.cash !== 'number' ||
+    typeof p.fund !== 'number' ||
+    typeof p.tw_stock !== 'number' ||
+    typeof p.us_stock !== 'number' ||
+    typeof p.crypto !== 'number' ||
+    !Array.isArray(p.history)
   ) return false;
 
   // [NEW] 支持 holdings 明細陣列與持股模式欄位校驗
-  if (portfolio.holdings !== undefined && !Array.isArray(portfolio.holdings)) return false;
-  if (portfolio.isHoldingMode !== undefined && typeof portfolio.isHoldingMode !== 'boolean') return false;
+  if (p.holdings !== undefined && !Array.isArray(p.holdings)) return false;
+  if (p.isHoldingMode !== undefined && typeof p.isHoldingMode !== 'boolean') return false;
 
   if (
-    typeof allocation_target.tw_stock !== 'number' ||
-    typeof allocation_target.us_stock !== 'number' ||
-    typeof allocation_target.bond !== 'number' ||
-    typeof allocation_target.cash !== 'number' ||
-    typeof allocation_target.crypto !== 'number'
+    typeof a.tw_stock !== 'number' ||
+    typeof a.us_stock !== 'number' ||
+    typeof a.bond !== 'number' ||
+    typeof a.cash !== 'number' ||
+    typeof a.crypto !== 'number'
   ) return false;
 
   if (
-    typeof retirement.age !== 'number' ||
-    typeof retirement.monthly_spending !== 'number' ||
-    typeof retirement.monthly_invest !== 'number' ||
-    typeof retirement.expected_return !== 'number' ||
-    typeof retirement.inflation !== 'number' ||
-    typeof retirement.life_expectancy !== 'number' ||
-    typeof retirement.cape_ratio !== 'number' ||
-    typeof retirement.spending_smile !== 'boolean'
+    typeof r.age !== 'number' ||
+    typeof r.monthly_spending !== 'number' ||
+    typeof r.monthly_invest !== 'number' ||
+    typeof r.expected_return !== 'number' ||
+    typeof r.inflation !== 'number' ||
+    typeof r.life_expectancy !== 'number' ||
+    typeof r.cape_ratio !== 'number' ||
+    typeof r.spending_smile !== 'boolean'
   ) return false;
 
   return true;

@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import type { TooltipValueType, TooltipPayloadEntry } from 'recharts';
+import type { TooltipPayloadEntry } from 'recharts';
 
 interface ChartLineConfig {
   key: string;
