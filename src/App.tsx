@@ -30,7 +30,8 @@ import {
   History,
   Users,
   FlaskConical,
-  BarChart3
+  BarChart3,
+  MoreHorizontal,
 } from 'lucide-react';
 
 // 全站 Navbar 導航與狀態燈元件
@@ -193,12 +194,17 @@ const Navbar: React.FC = () => {
 
 // 行動端底部固定 Tab Bar（只在 lg 以下顯示）
 const MobileTabBar: React.FC = () => {
-  const tabItems = [
+  const [showMore, setShowMore] = useState(false);
+
+  const primaryTabs = [
     { to: '/', label: '總覽', icon: <Compass className="w-5 h-5" /> },
     { to: '/allocation', label: '配置', icon: <Percent className="w-5 h-5" /> },
     { to: '/rebalance', label: '平衡', icon: <Scale className="w-5 h-5" /> },
     { to: '/retirement', label: '退休', icon: <TrendingUp className="w-5 h-5" /> },
     { to: '/family', label: '家庭', icon: <Users className="w-5 h-5" /> },
+  ];
+
+  const moreTabs = [
     { to: '/order', label: '下單', icon: <DollarSign className="w-5 h-5" /> },
     { to: '/backtest', label: '回測', icon: <History className="w-5 h-5" /> },
     { to: '/frontier', label: '前緣', icon: <BarChart3 className="w-5 h-5" /> },
@@ -207,25 +213,63 @@ const MobileTabBar: React.FC = () => {
   ];
 
   return (
-    <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg">
-      <div className="flex items-stretch">
-        {tabItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === '/'}
-            className={({ isActive }) => `
-              flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-center transition-all select-none
-              ${isActive
-                ? 'text-blue-600 bg-blue-50/70'
-                : 'text-slate-400 hover:text-slate-600'
-              }
-            `}
+    <div className="relative lg:hidden z-30">
+      {/* 更多功能下拉選單 */}
+      {showMore && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setShowMore(false)} />
+          <div className="fixed bottom-[56px] left-0 right-0 z-50 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg rounded-t-xl p-4 pb-6">
+            <div className="flex items-stretch">
+              {moreTabs.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={false}
+                  className={({ isActive }) => `
+                    flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-lg transition-all
+                    ${isActive
+                      ? 'text-blue-600 bg-blue-50/70'
+                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                    }
+                  `}
+                  onClick={() => setShowMore(false)}
+                >
+                  {item.icon}
+                  <span className="text-[10px] font-black">{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-lg">
+        <div className="flex items-stretch">
+          {primaryTabs.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === '/'}
+              className={({ isActive }) => `
+                flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-center transition-all select-none
+                ${isActive
+                  ? 'text-blue-600 bg-blue-50/70'
+                  : 'text-slate-400 hover:text-slate-600'
+                }
+              `}
+              onClick={() => setShowMore(false)}
+            >
+              {item.icon}
+              <span className="text-[9px] font-black">{item.label}</span>
+            </NavLink>
+          ))}
+          <button
+            onClick={() => setShowMore(prev => !prev)}
+            className="flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 text-center transition-all select-none text-slate-400 hover:text-slate-600"
           >
-            {item.icon}
-            <span className="text-[9px] font-black">{item.label}</span>
-          </NavLink>
-        ))}
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[9px] font-black">更多</span>
+          </button>
+        </div>
       </div>
     </div>
   );
