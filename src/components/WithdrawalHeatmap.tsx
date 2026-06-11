@@ -83,10 +83,11 @@ export const WithdrawalHeatmap: React.FC<Props> = ({ data, currentReturnRate }) 
 
               {/* 每個年份的 cell */}
               {data.data[rowIdx].map((cell, colIdx) => {
-                let bgClass = '';
-                if (cell.status === 'safe') bgClass = 'bg-emerald-400 hover:bg-emerald-500';
-                else if (cell.status === 'warning') bgClass = 'bg-amber-400 hover:bg-amber-500';
-                else bgClass = 'bg-rose-400 hover:bg-rose-500';
+                const bgClass = cell.status === 'safe'
+                  ? 'bg-emerald-400 hover:bg-emerald-500'
+                  : cell.status === 'warning'
+                    ? 'bg-amber-400 hover:bg-amber-500'
+                    : 'bg-rose-400 hover:bg-rose-500';
 
                 const isCurrent = rowIdx === currentRowIdx;
 

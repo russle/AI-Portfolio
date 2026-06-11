@@ -180,20 +180,10 @@ export const AllocationPage: React.FC = () => {
     crypto: portfolio.crypto.toString()
   });
 
-  // 當 portfolio 改變時，自動同步實際值狀態
-  React.useEffect(() => {
-    setEditingActuals({
-      cash: portfolio.cash.toString(),
-      fund: portfolio.fund.toString(),
-      tw_stock: portfolio.tw_stock.toString(),
-      us_stock: portfolio.us_stock.toString(),
-      crypto: portfolio.crypto.toString()
-    });
-  }, [portfolio]);
-
   const saveActualAssetValue = (key: AssetClassKey, valStr: string) => {
     const val = Math.max(0, parseInt(valStr) || 0);
     updatePortfolioAsset(key, val);
+    setEditingActuals(prev => ({ ...prev, [key]: valStr }));
   };
 
   return (

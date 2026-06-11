@@ -93,14 +93,10 @@ export const calculateCashOnlyRebalance = (
     const currentPercent = total > 0 ? currentValue / total : 0;
     
     // 如果總缺口大於 0，將新資金按正缺口比例分配給低配資產；否則等比例分配
-    let actionAmount = 0;
     const itemShortfall = shortfalls.find(s => s.key === key)?.shortfall || 0;
-
-    if (totalPositiveShortfall > 0) {
-      actionAmount = newCash * (itemShortfall / totalPositiveShortfall);
-    } else {
-      actionAmount = newCash * targetPercent;
-    }
+    const actionAmount = totalPositiveShortfall > 0
+      ? newCash * (itemShortfall / totalPositiveShortfall)
+      : newCash * targetPercent;
 
     return {
       assetKey: key,
@@ -312,14 +308,11 @@ export const calculateDcaAllocation = (
     const classTargetPercent = target[ASSET_MAP[h.assetType].targetKey];
     const classTotalValue = classTotals[h.assetType];
     
-    let targetPercent = 0;
-    if (classTotalValue > 0) {
-      targetPercent = classTargetPercent * (h.valueTwd / classTotalValue);
-    } else {
-      // Fallback
+    const targetPercent = (() => {
+      if (classTotalValue > 0) return classTargetPercent * (h.valueTwd / classTotalValue);
       const siblingCount = holdings.filter(sibling => sibling.assetType === h.assetType).length;
-      targetPercent = siblingCount > 0 ? classTargetPercent / siblingCount : 0;
-    }
+      return siblingCount > 0 ? classTargetPercent / siblingCount : 0;
+    })();
 
     const nextTotalValue = totalValue + budget;
     const idealValueTwd = nextTotalValue * targetPercent;
@@ -343,12 +336,9 @@ export const calculateDcaAllocation = (
 
   // 3. 分配預算與折算股數
   return dcaItems.map(item => {
-    let allocatedAmountTwd = 0;
-    if (totalPositiveGap > 0) {
-      allocatedAmountTwd = budget * (item.gapTwd / totalPositiveGap);
-    } else {
-      allocatedAmountTwd = budget * item.targetPercent;
-    }
+    const allocatedAmountTwd = totalPositiveGap > 0
+      ? budget * (item.gapTwd / totalPositiveGap)
+      : budget * item.targetPercent;
 
     let sharesToBuy = 0;
     let remainingCashTwd = allocatedAmountTwd;

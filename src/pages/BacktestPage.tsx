@@ -152,7 +152,9 @@ export const BacktestPage: React.FC = () => {
 
   // 元件載入時，自動觸發第一次回測模擬
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     executeBacktest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allocation_target, portfolio.isHoldingMode, actualAllocation]); // 當全域配置或真實持股改變時重算
 
   // 格式化 Y 軸數值 (萬 / 億)

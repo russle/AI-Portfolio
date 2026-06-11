@@ -12,15 +12,9 @@ export const ScenarioPage: React.FC = () => {
   const { portfolio, retirement } = state;
 
   // 1. 本地臨時預演狀態，預設為 current context state
-  const [projectedState, setProjectedState] = useState<AiPortfolioState>(state);
+  const [scenarioProjectedState, setScenarioProjectedState] = useState<AiPortfolioState>(state);
   const [selectedScenario, setSelectedScenario] = useState<string>('none');
-
-  // 當全域狀態改變時，若未選擇情境，則同步更新臨時狀態；否則保持鎖定
-  useMemo(() => {
-    if (selectedScenario === 'none') {
-      setProjectedState(state);
-    }
-  }, [state, selectedScenario]);
+  const projectedState = selectedScenario === 'none' ? state : scenarioProjectedState;
 
   // 2. 當前（基準）數值計算
   const currentTotal = useMemo(() => {
@@ -80,11 +74,11 @@ export const ScenarioPage: React.FC = () => {
   const handleSelectScenario = (scenarioId: string) => {
     setSelectedScenario(scenarioId);
     if (scenarioId === 'none') {
-      setProjectedState(state);
+      setScenarioProjectedState(state);
     } else {
       // 純函數拷貝運算，不污染全域
       const nextState = runScenarioProjection(state, scenarioId as 'market_drop' | 'us_bull' | 'fx_35' | 'inflation_5');
-      setProjectedState(nextState);
+      setScenarioProjectedState(nextState);
     }
   };
 

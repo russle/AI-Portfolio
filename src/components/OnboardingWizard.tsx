@@ -1,4 +1,4 @@
-import { useState, useEffect, useId } from 'react';
+import { useState, useId, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { TrendingUp, Home, BarChart3, Goal, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useApp } from '../context/AppContext';
@@ -75,7 +75,10 @@ export const OnboardingWizard = () => {
   const { state, updateRetirementConfig, updatePortfolioAsset } = useApp();
 
   // --- Wizard visibility ----------------------------------------------------
-  const [showWizard, setShowWizard] = useState(false);
+  const [showWizard] = useState(() => {
+    const completed = safeGetItem('onboarding_completed');
+    return completed !== 'true';
+  });
   const [isComplete, setIsComplete] = useState(false);
 
   // --- Active step ----------------------------------------------------------
@@ -100,14 +103,6 @@ export const OnboardingWizard = () => {
   const monthlyIncomeId = useId();
   const monthlySavingsId = useId();
   const totalAssetsId = useId();
-
-  // --- Detect onboarding completion ------------------------------------------
-  useEffect(() => {
-    const completed = safeGetItem('onboarding_completed');
-    if (completed !== 'true') {
-      setShowWizard(true);
-    }
-  }, []);
 
   // --- Derived values --------------------------------------------------------
   const annualSavings = monthlySavings * 12;

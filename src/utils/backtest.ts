@@ -293,7 +293,6 @@ export const fetchHistoricalPrices = async (
 const calculateMetricsForSeries = (
   values: number[],
   invested: number[],
-  _months: number
 ): PerformanceMetrics => {
   const finalValue = values[values.length - 1];
   const totalInvested = invested[invested.length - 1];
@@ -453,7 +452,7 @@ function simulateWindowFromPrices(
   monthlyInvest: number,
   rebalanceFreq: 'none' | 'monthly' | 'yearly'
 ): PerformanceMetrics {
-  let portShares = {
+  const portShares = {
     tw_stock: 0,
     us_stock: 0,
     fund: 0,
@@ -513,7 +512,7 @@ function simulateWindowFromPrices(
     investedAmounts.push(totalInvested);
   }
 
-  return calculateMetricsForSeries(portfolioValues, investedAmounts, months.length);
+  return calculateMetricsForSeries(portfolioValues, investedAmounts);
 }
 
 /**
@@ -553,7 +552,7 @@ export const runBacktest = async (
   const historyPoints: BacktestPoint[] = [];
   
   // 資產持股數 (模擬持股股數，現金則直接計為金額)
-  let portShares = {
+  const portShares = {
     tw_stock: 0,
     us_stock: 0,
     fund: 0,
@@ -563,7 +562,7 @@ export const runBacktest = async (
   let currentInvested = initialAmount;
 
   // [NEW] 當前真實持股資產持股數與現金
-  let actualShares = {
+  const actualShares = {
     tw_stock: 0,
     us_stock: 0,
     fund: 0,
@@ -573,7 +572,6 @@ export const runBacktest = async (
 
   // 對照組：100% 台股，初始金額全部買入台股
   let benchmarkShares = 0;
-  let benchmarkInvested = initialAmount;
 
   // 定存模擬：現金月報酬 (年利率 1.5%)
   const cashMonthlyRate = Math.pow(1.015, 1 / 12) - 1;
@@ -628,12 +626,11 @@ export const runBacktest = async (
       }
 
       // --- B. 對照組定期定額加碼 ---
-      benchmarkInvested += monthlyInvest;
       benchmarkShares += monthlyInvest / pTw;
     }
 
     // 2. 計算本月末總價值
-    let portVal = 
+    const portVal = 
       (portShares.tw_stock * pTw) +
       (portShares.us_stock * pUs) +
       (portShares.fund * pFund) +
@@ -650,7 +647,7 @@ export const runBacktest = async (
         actualCash;
     }
 
-    let benchVal = benchmarkShares * pTw;
+    const benchVal = benchmarkShares * pTw;
 
     // 3. 再平衡 (Rebalancing) 觸發判定
     const isYearlyRebalance = rebalanceFreq === 'yearly' && t > 0 && t % 12 === 0;
@@ -687,11 +684,11 @@ export const runBacktest = async (
   const benchmarkValues = historyPoints.map(p => p.benchmarkValue);
   const investedValues = historyPoints.map(p => p.totalInvested);
 
-  const portfolioMetrics = calculateMetricsForSeries(portfolioValues, investedValues, commonMonths.length);
-  const benchmarkMetrics = calculateMetricsForSeries(benchmarkValues, investedValues, commonMonths.length);
+  const portfolioMetrics = calculateMetricsForSeries(portfolioValues, investedValues);
+  const benchmarkMetrics = calculateMetricsForSeries(benchmarkValues, investedValues);
 
   const actualMetrics = actualAllocation
-    ? calculateMetricsForSeries(historyPoints.map(p => p.actualValue || 0), investedValues, commonMonths.length)
+    ? calculateMetricsForSeries(historyPoints.map(p => p.actualValue || 0), investedValues)
     : undefined;
 
   // 5. 計算重大危機事件對比

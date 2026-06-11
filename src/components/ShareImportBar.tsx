@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import type { AiPortfolioState, HoldingItem, PortfolioHistoryPoint } from '../context/AppContext';
 import {
@@ -177,19 +177,11 @@ export const ShareImportBar: React.FC = () => {
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [sharedState, setSharedState] = useState<Partial<AiPortfolioState> | null>(null);
-  const [shareModalOpen, setShareModalOpen] = useState(false);
-
-  // ═══════════════════════════════════════════════════════════════
-  // URL Share Detection — check for ?share= parameter on mount
-  // ═══════════════════════════════════════════════════════════════
-  useEffect(() => {
-    const decoded = parseShareUrl();
-    if (decoded) {
-      setSharedState(decoded);
-      setShareModalOpen(true);
-    }
-  }, []);
+  const [sharedState, setSharedState] = useState<Partial<AiPortfolioState> | null>(() => {
+    try { return parseShareUrl(); } catch { return null; }
+  });
+  const [shareModalDismissed, setShareModalDismissed] = useState(false);
+  const shareModalOpen = sharedState !== null && !shareModalDismissed;
 
   // ── URL Import Handler ──
   const handleUrlImport = () => {
@@ -462,7 +454,7 @@ export const ShareImportBar: React.FC = () => {
             <div className="flex gap-3">
               <button
                 onClick={() => {
-                  setShareModalOpen(false);
+                  setShareModalDismissed(true);
                   setSharedState(null);
                   window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
                 }}
@@ -472,7 +464,7 @@ export const ShareImportBar: React.FC = () => {
               </button>
               <button
                 onClick={() => {
-                  setShareModalOpen(false);
+                  setShareModalDismissed(true);
                   setBackupMsg({ type: 'success', text: '📊 已載入分享配置作為對比參考！' });
                   setTimeout(() => setBackupMsg(null), 4000);
                   window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
