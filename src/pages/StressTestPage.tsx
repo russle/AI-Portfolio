@@ -53,6 +53,7 @@ export const StressTestPage: React.FC = () => {
 
   const [selectedRegime, setSelectedRegime] = useState<SelectableRegime | null>(null);
   const [showResult, setShowResult] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   // ── 計算壓力測試結果 ──
   const results = useMemo<StressTestResult[]>(() => {
@@ -77,7 +78,13 @@ export const StressTestPage: React.FC = () => {
   };
 
   const handleRunTest = () => {
-    if (selectedRegime) setShowResult(true);
+    if (!selectedRegime) return;
+    setIsLoading(true);
+    setShowResult(false);
+    setTimeout(() => {
+      setShowResult(true);
+      setIsLoading(false);
+    }, 800);
   };
 
   return (
@@ -173,6 +180,30 @@ export const StressTestPage: React.FC = () => {
       </div>
 
       {/* ═══ 結果展示區 ═══ */}
+      {isLoading && (
+        <div className="space-y-6 animate-pulse">
+          <div className="bg-white/80 border border-slate-200/60 rounded-2xl p-6 space-y-6">
+            <div className="flex justify-between">
+              <div className="space-y-2">
+                <div className="h-3 bg-slate-200 rounded w-24" />
+                <div className="h-5 bg-slate-200 rounded w-48" />
+                <div className="h-3 bg-slate-200 rounded w-72" />
+              </div>
+              <div className="h-8 bg-slate-200 rounded w-28" />
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/40">
+                  <div className="h-3 bg-slate-200 rounded w-16 mb-3" />
+                  <div className="h-6 bg-slate-200 rounded w-24" />
+                </div>
+              ))}
+            </div>
+            <div className="h-64 bg-slate-200 rounded-2xl" />
+          </div>
+        </div>
+      )}
+
       {showResult && results.length > 0 && (
         <div className="space-y-8">
           {results.map((result) => {
@@ -352,7 +383,7 @@ export const StressTestPage: React.FC = () => {
       )}
 
       {/* 無結果時的說明提示 */}
-      {!showResult && (
+      {!isLoading && !showResult && (
         <div className="text-center py-10">
           <p className="text-sm text-slate-400">
             選擇上方場景後，點擊「開始脫水測試」按鈕檢視結果

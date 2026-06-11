@@ -1,24 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
-import { runBacktest, runRollingBacktest, CRISIS_EVENTS } from '../utils/backtest';
+import { MetricCards } from '../components/MetricCards';
+import { CrisisTable } from '../components/CrisisTable';
+import { RollingResults } from '../components/RollingResults';
+import { BacktestParams } from '../components/BacktestParams';
+import { runBacktest, runRollingBacktest } from '../utils/backtest';
 import type { BacktestResult, RollingBacktestResult } from '../utils/backtest';
 import { 
-  Play, 
   TrendingUp, 
-  TrendingDown, 
   RefreshCw, 
   AlertTriangle, 
-  Calendar, 
-  DollarSign, 
   History, 
   Sparkles, 
-  ShieldAlert, 
-  Layers,
-  CheckCircle,
-  HelpCircle,
-  Coins,
-  SlidersHorizontal 
+  Layers
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -147,6 +142,16 @@ export const BacktestPage: React.FC = () => {
     }
   };
 
+  // 切換回測模式時，清除另一模式的結果
+  const handleSetBacktestMode = (mode: 'single' | 'rolling') => {
+    setBacktestMode(mode);
+    if (mode === 'single') {
+      setRollingResult(null);
+    } else {
+      setBacktestResult(null);
+    }
+  };
+
   // 元件載入時，自動觸發第一次回測模擬
   useEffect(() => {
     executeBacktest();
@@ -226,244 +231,27 @@ export const BacktestPage: React.FC = () => {
         
         {/* 左欄：回測控制面板 */}
         <div className="space-y-6 lg:col-span-1">
-          <Card className="sticky top-20 bg-white/80 border border-slate-200/60 p-6 rounded-2xl shadow-xl">
-            <h3 className="text-sm font-bold text-slate-800 mb-6 flex items-center gap-2 pb-3 border-b border-slate-100">
-              <ShieldAlert className="w-4.5 h-4.5 text-blue-600" />
-              回測模擬參數
-            </h3>
-
-            <div className="space-y-5">
-              {/* 回測區間選擇 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-2.5">
-                  回測時間長度
-                </label>
-                <div className="grid grid-cols-4 gap-1.5 p-1 bg-slate-100 rounded-xl">
-                  {(['1y', '3y', '5y', '10y'] as const).map((r) => (
-                    <button
-                      key={r}
-                      onClick={() => {
-                        setRange(r);
-                        executeBacktest(r);
-                      }}
-                      className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                        range === r
-                          ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {r.toUpperCase()}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 初始資金 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-2 flex justify-between">
-                  <span>初始投資金額</span>
-                  <span className="text-blue-600 font-mono font-bold">{formatCurrency(initialAmount)}</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <DollarSign className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="number"
-                    value={initialAmount}
-                    onChange={(e) => setInitialAmount(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
-                    placeholder="例如: 1000000"
-                  />
-                </div>
-              </div>
-
-              {/* 每月定期定額 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-2 flex justify-between">
-                  <span>每月定期定額投入</span>
-                  <span className="text-blue-600 font-mono font-bold">{formatCurrency(monthlyInvest)}</span>
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                    <Calendar className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="number"
-                    value={monthlyInvest}
-                    onChange={(e) => setMonthlyInvest(Math.max(0, parseInt(e.target.value) || 0))}
-                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono"
-                    placeholder="例如: 20000"
-                  />
-                </div>
-              </div>
-
-              {/* 再平衡頻率 */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-2.5">
-                  資產再平衡頻率
-                </label>
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl">
-                  {[
-                    { key: 'none', label: '不進行' },
-                    { key: 'monthly', label: '每月' },
-                    { key: 'yearly', label: '每年' }
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      onClick={() => setRebalanceFreq(item.key as 'none' | 'monthly' | 'yearly')}
-                      className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                        rebalanceFreq === item.key
-                          ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                          : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-1.5 text-[9px] text-slate-400 font-medium">
-                  💡 再平衡將定期強制賣出超漲、買入超跌資產，將配置拉回設定目標比例。
-                </p>
-              </div>
-
-              {/* 代表標的自定義設定 */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200/50 rounded-xl space-y-3">
-                <div className="text-[11px] font-extrabold text-slate-600 flex items-center gap-1">
-                  <Coins className="w-3.5 h-3.5 text-slate-400" />
-                  各大類代表標的 (Yahoo Finance 代號)
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 mb-1">台股代號</label>
-                    <input
-                      type="text"
-                      value={symbols.tw_stock}
-                      onChange={(e) => setSymbols(prev => ({ ...prev, tw_stock: e.target.value }))}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 mb-1">美股代號</label>
-                    <input
-                      type="text"
-                      value={symbols.us_stock}
-                      onChange={(e) => setSymbols(prev => ({ ...prev, us_stock: e.target.value }))}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 mb-1">基金/債券代號</label>
-                    <input
-                      type="text"
-                      value={symbols.fund}
-                      onChange={(e) => setSymbols(prev => ({ ...prev, fund: e.target.value }))}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold font-mono focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[9px] font-bold text-slate-400 mb-1">加密貨幣代號</label>
-                    <input
-                      type="text"
-                      value={symbols.crypto}
-                      onChange={(e) => setSymbols(prev => ({ ...prev, crypto: e.target.value }))}
-                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-bold font-mono focus:outline-none"
-                    />
-                  </div>
-                </div>
-                <p className="text-[8px] text-slate-400 leading-normal">
-                  * 預設標的包含完整 10 年離線備份，輸入自訂代號時若遇 CORS 限制，將自動無感啟用高精度離線 fallback，保證系統流暢穩定。
-                </p>
-              </div>
-
-              {/* 回測模式切換 */}
-              <div className="pt-3 border-t border-slate-100">
-                <label className="block text-[11px] font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
-                  回測模式
-                </label>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
-                  <button
-                    onClick={() => { setBacktestMode('single'); setRollingResult(null); }}
-                    className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                      backtestMode === 'single'
-                        ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    單一回測
-                  </button>
-                  <button
-                    onClick={() => { setBacktestMode('rolling'); setBacktestResult(null); }}
-                    className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
-                      backtestMode === 'rolling'
-                        ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
-                        : 'text-slate-500 hover:text-slate-700'
-                    }`}
-                  >
-                    滾動回測
-                  </button>
-                </div>
-              </div>
-
-              {/* 滾動參數設定 */}
-              {backtestMode === 'rolling' && (
-                <div className="space-y-4 animate-fade-in pt-2">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-2">
-                      視窗大小: {windowMonths} 個月 ({Math.round(windowMonths/12)} 年)
-                    </label>
-                    <input type="range" min="36" max="120" value={windowMonths}
-                      onChange={(e) => setWindowMonths(Number(e.target.value))}
-                      className="w-full accent-blue-600 cursor-pointer" />
-                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-0.5">
-                      <span>3 年</span>
-                      <span>7 年</span>
-                      <span>10 年</span>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-500 mb-2">
-                      步長: {stepMonths} 個月
-                    </label>
-                    <input type="range" min="1" max="12" value={stepMonths}
-                      onChange={(e) => setStepMonths(Number(e.target.value))}
-                      className="w-full accent-blue-600 cursor-pointer" />
-                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-0.5">
-                      <span>1 月</span>
-                      <span>6 月</span>
-                      <span>12 月</span>
-                    </div>
-                  </div>
-                  <p className="text-[9px] text-slate-400 font-medium leading-relaxed bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
-                    💡 滾動回測會以不同時間窗口反覆驗證策略穩定性，視窗越大越能反映長期表現，步長越小樣本越多。
-                  </p>
-                </div>
-              )}
-
-              {/* 執行按鈕 */}
-              <button
-                onClick={() => executeBacktest()}
-                disabled={isLoading}
-                className={`w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white rounded-xl font-extrabold text-xs shadow-lg shadow-blue-500/20 cursor-pointer flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
-                  isLoading ? 'opacity-85 pointer-events-none' : ''
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    正在運算複雜回測中...
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 fill-current" />
-                    開始歷史回測模擬
-                  </>
-                )}
-              </button>
-
-            </div>
-          </Card>
+          <BacktestParams
+            range={range}
+            setRange={setRange}
+            initialAmount={initialAmount}
+            setInitialAmount={setInitialAmount}
+            monthlyInvest={monthlyInvest}
+            setMonthlyInvest={setMonthlyInvest}
+            rebalanceFreq={rebalanceFreq}
+            setRebalanceFreq={setRebalanceFreq}
+            symbols={symbols}
+            setSymbols={setSymbols}
+            backtestMode={backtestMode}
+            setBacktestMode={handleSetBacktestMode}
+            windowMonths={windowMonths}
+            setWindowMonths={setWindowMonths}
+            stepMonths={stepMonths}
+            setStepMonths={setStepMonths}
+            targetAllocationSum={targetAllocationSum}
+            executeBacktest={executeBacktest}
+            isLoading={isLoading}
+          />
         </div>
 
         {/* 右欄：圖表與績效發光牆 */}
@@ -481,109 +269,11 @@ export const BacktestPage: React.FC = () => {
           )}
 
           {/* 績效指標發光牆 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            
-            {/* 卡片 1: 最終資產 */}
-            <Card hoverEffect={false} className="bg-gradient-to-b from-blue-50/40 to-white border-blue-100/50 p-4 rounded-2xl">
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">最終資產總值</div>
-              {isLoading ? (
-                <div className="h-6 bg-slate-200 rounded w-28 animate-pulse mt-2"></div>
-              ) : (
-                <div className="mt-1.5">
-                  <div className="text-base font-black font-mono text-blue-600">
-                    {backtestResult ? formatYAxis(backtestResult.metrics.portfolio.finalValue) : '$-'}
-                  </div>
-                  {backtestResult?.metrics.actual && (
-                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
-                      真實持股: {formatYAxis(backtestResult.metrics.actual.finalValue)}
-                    </div>
-                  )}
-                  <div className="text-[9px] font-bold text-slate-400 mt-1">
-                    投入: {backtestResult ? formatYAxis(backtestResult.metrics.portfolio.totalInvested) : '-'}
-                  </div>
-                </div>
-              )}
-            </Card>
-
-            {/* 卡片 2: 年化報酬率 (CAGR) */}
-            <Card hoverEffect={false} className="bg-gradient-to-b from-emerald-50/40 to-white border-emerald-100/50 p-4 rounded-2xl">
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">年化報酬率 (CAGR)</div>
-              {isLoading ? (
-                <div className="h-6 bg-slate-200 rounded w-16 animate-pulse mt-2"></div>
-              ) : (
-                <div className="mt-1.5">
-                  <div className="text-lg font-black font-mono text-emerald-600 flex items-center gap-0.5">
-                    {backtestResult ? `${backtestResult.metrics.portfolio.cagr}%` : '-%'}
-                    <TrendingUp className="w-3.5 h-3.5 text-emerald-500" />
-                  </div>
-                  {backtestResult?.metrics.actual && (
-                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
-                      真實持股: {backtestResult.metrics.actual.cagr}%
-                    </div>
-                  )}
-                  <div className="text-[9px] font-bold text-slate-400 mt-1">
-                    對照組: {backtestResult ? `${backtestResult.metrics.benchmark.cagr}%` : '-'}
-                  </div>
-                </div>
-              )}
-            </Card>
-
-            {/* 卡片 3: 最大回撤 (Max Drawdown) */}
-            <Card hoverEffect={false} className="bg-gradient-to-b from-rose-50/40 to-white border-rose-100/50 p-4 rounded-2xl">
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">歷史最大回撤</div>
-              {isLoading ? (
-                <div className="h-6 bg-slate-200 rounded w-20 animate-pulse mt-2"></div>
-              ) : (
-                <div className="mt-1.5">
-                  <div className="text-lg font-black font-mono text-rose-600 flex items-center gap-0.5">
-                    {backtestResult ? `${backtestResult.metrics.portfolio.maxDrawdown}%` : '-%'}
-                    <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
-                  </div>
-                  {backtestResult?.metrics.actual && (
-                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
-                      真實持股: {backtestResult.metrics.actual.maxDrawdown}%
-                    </div>
-                  )}
-                  <div className="text-[9px] font-bold text-slate-400 mt-1">
-                    對照組: {backtestResult ? `${backtestResult.metrics.benchmark.maxDrawdown}%` : '-'}
-                  </div>
-                </div>
-              )}
-            </Card>
-
-            {/* 卡片 4: 夏普值 (Sharpe Ratio) */}
-            <Card hoverEffect={false} className="bg-gradient-to-b from-amber-50/40 to-white border-amber-100/50 p-4 rounded-2xl">
-              <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">夏普值 (Sharpe)</div>
-              {isLoading ? (
-                <div className="h-6 bg-slate-200 rounded w-12 animate-pulse mt-2"></div>
-              ) : (
-                <div className="mt-1.5">
-                  <div className="text-lg font-black font-mono text-amber-600 flex items-center gap-1.5">
-                    {backtestResult ? backtestResult.metrics.portfolio.sharpeRatio : '-'}
-                    {backtestResult && backtestResult.metrics.portfolio.sharpeRatio >= 1.5 && (
-                      <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-amber-500/10 rounded border border-amber-500/20 text-amber-600 animate-pulse">
-                        極佳 🏆
-                      </span>
-                    )}
-                    {backtestResult && backtestResult.metrics.portfolio.sharpeRatio >= 1.0 && backtestResult.metrics.portfolio.sharpeRatio < 1.5 && (
-                      <span className="text-[9px] font-extrabold px-1.5 py-0.2 bg-amber-500/10 rounded border border-amber-500/20 text-amber-600">
-                        優秀 👍
-                      </span>
-                    )}
-                  </div>
-                  {backtestResult?.metrics.actual && (
-                    <div className="text-[9px] font-bold text-amber-500 mt-0.5 font-mono">
-                      真實持股: {backtestResult.metrics.actual.sharpeRatio}
-                    </div>
-                  )}
-                  <div className="text-[9px] font-bold text-slate-400 mt-1">
-                    對照組: {backtestResult ? backtestResult.metrics.benchmark.sharpeRatio : '-'}
-                  </div>
-                </div>
-              )}
-            </Card>
-
-          </div>
+          <MetricCards
+            isLoading={isLoading}
+            backtestResult={backtestResult}
+            formatYAxis={formatYAxis}
+          />
 
           {/* 圖表卡片 */}
           <Card hoverEffect={false} className="bg-white/80 border border-slate-200/60 p-6 rounded-3xl shadow-xl">
@@ -800,260 +490,19 @@ export const BacktestPage: React.FC = () => {
 
         {/* 滾動回測結果 */}
         {rollingResult && (
-          <div className="lg:col-span-3">
-            <Card className="p-6">
-              <h3 className="font-bold text-slate-700 text-sm mb-4 flex items-center gap-2">
-                🔄 滾動回測績效分布
-                <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {rollingResult.windows.length} 個窗口
-                </span>
-              </h3>
-              
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6">
-                <div className="p-3 bg-blue-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">中位數 CAGR</div>
-                  <div className="text-lg font-black text-blue-600">{rollingResult.medianPortfolioCagr.toFixed(1)}%</div>
-                </div>
-                <div className="p-3 bg-rose-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">最差 CAGR</div>
-                  <div className="text-lg font-black text-rose-600">{rollingResult.worstPortfolioCagr.toFixed(1)}%</div>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">最佳 CAGR</div>
-                  <div className="text-lg font-black text-emerald-600">{rollingResult.bestPortfolioCagr.toFixed(1)}%</div>
-                </div>
-                <div className="p-3 bg-amber-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">P5 CAGR</div>
-                  <div className="text-lg font-black text-amber-600">{rollingResult.pctl5PortfolioCagr.toFixed(1)}%</div>
-                </div>
-                <div className="p-3 bg-emerald-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">P95 CAGR</div>
-                  <div className="text-lg font-black text-emerald-600">{rollingResult.pctl95PortfolioCagr.toFixed(1)}%</div>
-                </div>
-                <div className="p-3 bg-rose-50 rounded-xl">
-                  <div className="text-[9px] font-bold text-slate-400">最差回撤</div>
-                  <div className="text-lg font-black text-rose-600">{rollingResult.worstPortfolioDd.toFixed(1)}%</div>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase">
-                      <th className="pb-2">#</th>
-                      <th className="pb-2">區間</th>
-                      <th className="pb-2 text-right">配置 CAGR</th>
-                      <th className="pb-2 text-right">對照組 CAGR</th>
-                      <th className="pb-2 text-right">配置回撤</th>
-                      <th className="pb-2 text-right">對照組回撤</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rollingResult.windows.map((w, i) => (
-                      <tr key={i} className="hover:bg-slate-50">
-                        <td className="py-2 font-bold text-slate-500">{i + 1}</td>
-                        <td className="py-2 text-slate-500 font-medium">{w.startDate} ~ {w.endDate}</td>
-                        <td className="py-2 text-right font-bold text-blue-600">{w.portfolio.cagr.toFixed(1)}%</td>
-                        <td className="py-2 text-right text-slate-500">{w.benchmark.cagr.toFixed(1)}%</td>
-                        <td className="py-2 text-right text-rose-500">{w.portfolio.maxDrawdown.toFixed(1)}%</td>
-                        <td className="py-2 text-right text-slate-500">{w.benchmark.maxDrawdown.toFixed(1)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <p className="text-[9px] text-slate-400 mt-3 font-medium">
-                  共 {rollingResult.windows.length} 個滑動窗口 · 每個窗口 {windowMonths} 個月 ({Math.round(windowMonths/12)} 年) · 步長 {stepMonths} 個月
-                </p>
-              </div>
-            </Card>
-          </div>
+          <RollingResults
+            rollingResult={rollingResult}
+            windowMonths={windowMonths}
+            stepMonths={stepMonths}
+          />
         )}
       </div>
 
       {/* 下方：重大危機壓力測試對決看板 */}
-      <div className="space-y-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center text-red-600">
-            <ShieldAlert className="w-4.5 h-4.5 stroke-[2.5]" />
-          </div>
-          <div>
-            <h3 className="text-base font-extrabold text-slate-800">重大黑天鵝危機對抗實戰 (Crisis Stress Test Showcase)</h3>
-            <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
-              回測歷史上三次極端系統風險時期，對決多元配置與單一資產 (100% 台股) 的跌幅控制力及爬回前高復原月數。
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {CRISIS_EVENTS.map((crisis, idx) => {
-            // 從結果中獲取當前危機的 metrics
-            const matchedMetric = backtestResult?.crisisMetrics.find(m => m.name === crisis.name);
-            const isAvailable = matchedMetric ? matchedMetric.isAvailable : (range === '10y' || (range === '5y' && idx >= 1) || (range === '3y' && idx === 3)); 
-            
-            // 是否在目前的歷史回測長度內
-            const showLocked = !isAvailable;
-
-            return (
-              <div key={crisis.name} className="relative group">
-                <Card 
-                  hoverEffect={!showLocked} 
-                  className={`bg-white border rounded-2xl p-5 shadow-lg transition-all h-full flex flex-col justify-between ${
-                    showLocked 
-                      ? 'border-slate-100/50 bg-slate-50/60 opacity-60 filter grayscale' 
-                      : 'border-slate-200/60 hover:shadow-xl hover:-translate-y-1'
-                  }`}
-                >
-                  <div className="space-y-4">
-                    {/* 危機時間與名稱 */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <span className="text-[9px] font-black px-2 py-0.5 bg-rose-50 border border-rose-100 text-rose-500 rounded font-mono">
-                          {crisis.period}
-                        </span>
-                        <h4 className="text-xs font-black text-slate-800 mt-1">{crisis.name}</h4>
-                      </div>
-                      {!showLocked && (
-                        <span className="w-5 h-5 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                          <CheckCircle className="w-3.5 h-3.5 fill-current text-white bg-emerald-500 rounded-full" />
-                        </span>
-                      )}
-                    </div>
-
-                    {/* 描述 */}
-                    <p className="text-[10px] text-slate-400 font-medium leading-normal">
-                      {crisis.description}
-                    </p>
-
-                    {/* 對決數據牆 */}
-                    {!showLocked && matchedMetric ? (
-                      <div className="space-y-4 pt-3 border-t border-slate-100">
-                        {/* 最大回撤對抗 */}
-                        <div>
-                          <div className="text-[9px] font-bold text-slate-500 mb-2 flex justify-between">
-                            <span>極端最大跌幅對決</span>
-                            <span className="text-rose-500 text-[10px]">
-                              理想組合比大盤防禦力: <strong className="font-extrabold">
-                                {Math.max(0, Math.round(matchedMetric.benchmarkDrop - matchedMetric.portfolioDrop))}%
-                              </strong>
-                            </span>
-                          </div>
-                          
-                          <div className="space-y-2.5">
-                            {/* 配置組合 */}
-                            <div>
-                              <div className="flex justify-between text-[9px] font-bold text-slate-600 mb-1">
-                                <span>我的目標配置 (理想藍圖)</span>
-                                <span className="text-blue-600 font-mono">{matchedMetric.portfolioDrop.toFixed(2)}%</span>
-                              </div>
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div 
-                                  className="bg-blue-500 h-full rounded-full transition-all duration-1000" 
-                                  style={{ width: `${Math.min(100, Math.abs(matchedMetric.portfolioDrop) * 2)}%` }}
-                                ></div>
-                              </div>
-                            </div>
-
-                            {/* 當前真實持股 [NEW] */}
-                            {matchedMetric.actualDrop !== undefined && (
-                              <div>
-                                <div className="flex justify-between text-[9px] font-bold text-amber-500 mb-1">
-                                  <span>當前真實持股 (實際偏離)</span>
-                                  <span className="text-amber-600 font-mono">{matchedMetric.actualDrop.toFixed(2)}%</span>
-                                </div>
-                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                  <div 
-                                    className="bg-amber-500 h-full rounded-full transition-all duration-1000" 
-                                    style={{ width: `${Math.min(100, Math.abs(matchedMetric.actualDrop) * 2)}%` }}
-                                  ></div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* 對照組 */}
-                            <div>
-                              <div className="flex justify-between text-[9px] font-bold text-slate-400 mb-1">
-                                <span>100% 台股對照組</span>
-                                <span className="text-slate-600 font-mono">{matchedMetric.benchmarkDrop.toFixed(2)}%</span>
-                              </div>
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div 
-                                  className="bg-slate-400 h-full rounded-full transition-all duration-1000" 
-                                  style={{ width: `${Math.min(100, Math.abs(matchedMetric.benchmarkDrop) * 2)}%` }}
-                                ></div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 復原速度對抗 */}
-                        <div className={`grid gap-2.5 pt-2 ${matchedMetric.actualRecovery !== undefined ? 'grid-cols-3' : 'grid-cols-2'}`}>
-                          <div className="p-2 bg-blue-50/50 border border-blue-100/50 rounded-xl flex flex-col justify-between">
-                            <div className="text-[7.5px] font-bold text-blue-500">目標配置復原</div>
-                            <div className="text-[10px] font-black text-blue-700 mt-0.5 font-mono">
-                              {matchedMetric.portfolioRecovery === -1 
-                                ? '未復原 ⚠️' 
-                                : `${matchedMetric.portfolioRecovery}個月`}
-                            </div>
-                          </div>
-                          
-                          {matchedMetric.actualRecovery !== undefined && (
-                            <div className="p-2 bg-amber-50/50 border border-amber-100/50 rounded-xl flex flex-col justify-between">
-                              <div className="text-[7.5px] font-bold text-amber-500">真實持股復原</div>
-                              <div className="text-[10px] font-black text-amber-700 mt-0.5 font-mono">
-                                {matchedMetric.actualRecovery === -1 
-                                  ? '未復原 ⚠️' 
-                                  : `${matchedMetric.actualRecovery}個月`}
-                              </div>
-                            </div>
-                          )}
-                          
-                          <div className="p-2 bg-slate-50 border border-slate-200/50 rounded-xl flex flex-col justify-between">
-                            <div className="text-[7.5px] font-bold text-slate-400">對照組復原</div>
-                            <div className="text-[10px] font-black text-slate-600 mt-0.5 font-mono">
-                              {matchedMetric.benchmarkRecovery === -1 
-                                ? '未復原 ⚠️' 
-                                : `${matchedMetric.benchmarkRecovery}個月`}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 亮點提示 */}
-                        {matchedMetric.portfolioRecovery !== -1 && matchedMetric.benchmarkRecovery !== -1 && matchedMetric.portfolioRecovery < matchedMetric.benchmarkRecovery && (
-                          <div className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100/50 leading-relaxed">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                            資產多元配置比對照組提早 {matchedMetric.benchmarkRecovery - matchedMetric.portfolioRecovery} 個月回到前高！
-                          </div>
-                        )}
-
-                      </div>
-                    ) : (
-                      // 骨架屏或鎖定提示
-                      <div className="h-32 flex flex-col items-center justify-center text-slate-400 text-[10px] font-bold pt-4">
-                        {showLocked ? (
-                          <>
-                            <HelpCircle className="w-8 h-8 text-slate-300 mb-2" />
-                            <span>回測時限外</span>
-                            <span className="text-[8px] text-slate-400 mt-1 font-medium font-sans">
-                              請切換至 5 年或 10 年回測期解鎖
-                            </span>
-                          </>
-                        ) : (
-                          <div className="animate-pulse w-full space-y-3">
-                            <div className="h-3 bg-slate-100 rounded w-1/3"></div>
-                            <div className="h-5 bg-slate-100 rounded w-full"></div>
-                            <div className="h-2 bg-slate-100 rounded w-full"></div>
-                            <div className="h-10 bg-slate-100 rounded w-full"></div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <CrisisTable
+        crisisMetrics={backtestResult?.crisisMetrics ?? []}
+        range={range}
+      />
 
     </div>
   );

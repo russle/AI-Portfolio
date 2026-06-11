@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, NavLink } from 'react-router-dom';
 import { AppProvider, useApp } from './context/AppContext';
 import { OnboardingWizard } from './components/OnboardingWizard';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // 路由級 Code Splitting：每個頁面獨立 chunk，僅在首次造訪時載入
 const OverviewPage = lazy(() => import('./pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
@@ -238,6 +239,7 @@ export const AppContent: React.FC = () => {
 
       {/* 核心多路由頁面渲染區（lazy loading + Suspense） */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8">
+        <ErrorBoundary>
         <Suspense fallback={
           <div className="flex items-center justify-center min-h-[60vh]">
             <div className="flex flex-col items-center gap-4">
@@ -259,6 +261,7 @@ export const AppContent: React.FC = () => {
             <Route path="/frontier" element={<EfficientFrontierPage />} />
           </Routes>
         </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* 行動端底部 Tab Bar 導航（淡出 lg 更大設備） */}

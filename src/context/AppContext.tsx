@@ -654,11 +654,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     const fetchFxRate = async () => {
       try {
-        console.log('[FX Auto Fetch] Starting auto USD rate fetch...');
         const rate = await fetchLatestPrice('USDTWD=X');
         if (rate !== null && rate > 20 && rate < 50) {
-          console.log(`[FX Auto Fetch] Successfully loaded USD rate from Yahoo Finance: ${rate}`);
-          updateUsdRate(rate);  // updateUsdRate 內部已自動寫入 fxLastUpdated
+          updateUsdRate(rate);
         } else {
           console.warn(`[FX Auto Fetch] API returned invalid or no rate: ${rate}. Using fallback.`);
         }

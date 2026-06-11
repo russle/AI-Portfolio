@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import type { AllocationTarget } from '../context/AppContext';
 import { Card } from '../components/Card';
@@ -114,6 +114,13 @@ export const EfficientFrontierPage: React.FC = () => {
   const { allocation_target } = state;
 
   const [showCurrent, setShowCurrent] = useState<boolean>(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  /* ---- 初始載入延遲以展示骨架屏 ---- */
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 600);
+    return () => clearTimeout(timer);
+  }, []);
 
   /* ---- 計算最佳化結果 ---- */
   const result = useMemo<OptimizationResult>(() => {
@@ -160,6 +167,42 @@ export const EfficientFrontierPage: React.FC = () => {
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
+      {isLoading ? (
+        /* ═══ 骨架屏 ═══ */
+        <div className="space-y-8 animate-pulse">
+          {/* Title skeleton */}
+          <div className="space-y-3">
+            <div className="h-8 bg-slate-200 rounded w-72" />
+            <div className="h-4 bg-slate-200 rounded w-96" />
+          </div>
+          {/* Metrics cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="bg-white/80 border border-slate-200/60 rounded-2xl p-4">
+                <div className="h-3 bg-slate-200 rounded w-20 mb-3" />
+                <div className="h-6 bg-slate-200 rounded w-16 mb-2" />
+                <div className="h-3 bg-slate-200 rounded w-28" />
+              </div>
+            ))}
+          </div>
+          {/* Chart skeleton */}
+          <div className="bg-white/80 border border-slate-200/60 rounded-2xl p-6">
+            <div className="h-4 bg-slate-200 rounded w-40 mb-6" />
+            <div className="h-[420px] bg-slate-100 rounded-2xl" />
+          </div>
+          {/* Weight bars skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-slate-50 rounded-xl p-3">
+                <div className="h-3 bg-slate-200 rounded w-24 mb-3" />
+                <div className="h-3 bg-slate-200 rounded-full w-full mb-2" />
+                <div className="h-2 bg-slate-200 rounded w-16" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Title */}
       <div>
         <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -377,6 +420,8 @@ export const EfficientFrontierPage: React.FC = () => {
           </div>
         </div>
       </Card>
+        </>
+      )}
     </div>
   );
 };

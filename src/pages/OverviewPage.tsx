@@ -1,9 +1,8 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState, PortfolioHistoryPoint } from '../context/AppContext';
+import type { PortfolioHistoryPoint } from '../context/AppContext';
 import { Card } from '../components/Card';
-import { ProgressBar } from '../components/ProgressBar';
 import { LineChart } from '../components/LineChart';
 import { StackedAreaChart } from '../components/StackedAreaChart';
 import { AlertBanner } from '../components/AlertBanner';
@@ -17,83 +16,29 @@ import {
 import { 
   TrendingUp, 
   Layers, 
-  RefreshCw, 
   Calculator, 
   Eye, 
   ShoppingBag,
   ArrowUpRight,
   ArrowDownRight,
-  Download,
-  Upload,
-  Database,
-  CheckCircle,
-  AlertCircle,
   CalendarPlus,
   Edit,
   Trash2,
   Activity,
   TrendingDown,
   BarChart2,
-  Share2
 } from 'lucide-react';
-import {
-  encodeStateToUrl,
-  buildShareUrl,
-  parseShareUrl,
-} from '../utils/shareUtils';
-
-// 還原資料的欄位合法性校驗
-const validateImportedState = (data: Record<string, unknown>): boolean => {
-  if (!data || typeof data !== 'object') return false;
-  if (!data.portfolio || !data.allocation_target || !data.retirement) return false;
-  
-  const { portfolio, allocation_target, retirement } = data;
-  
-  if (
-    typeof portfolio.cash !== 'number' ||
-    typeof portfolio.fund !== 'number' ||
-    typeof portfolio.tw_stock !== 'number' ||
-    typeof portfolio.us_stock !== 'number' ||
-    typeof portfolio.crypto !== 'number' ||
-    !Array.isArray(portfolio.history)
-  ) return false;
-  
-  // [NEW] 支持 holdings 明細陣列與持股模式欄位校驗
-  if (portfolio.holdings !== undefined && !Array.isArray(portfolio.holdings)) return false;
-  if (portfolio.isHoldingMode !== undefined && typeof portfolio.isHoldingMode !== 'boolean') return false;
-  
-  if (
-    typeof allocation_target.tw_stock !== 'number' ||
-    typeof allocation_target.us_stock !== 'number' ||
-    typeof allocation_target.bond !== 'number' ||
-    typeof allocation_target.cash !== 'number' ||
-    typeof allocation_target.crypto !== 'number'
-  ) return false;
-  
-  if (
-    typeof retirement.age !== 'number' ||
-    typeof retirement.monthly_spending !== 'number' ||
-    typeof retirement.monthly_invest !== 'number' ||
-    typeof retirement.expected_return !== 'number' ||
-    typeof retirement.inflation !== 'number'
-  ) return false;
-  
-  return true;
-};
+import { ShareImportBar } from '../components/ShareImportBar';
+import { PortfolioSummaryCards } from '../components/PortfolioSummaryCards';
 
 export const OverviewPage: React.FC = () => {
-  const { state, importState, addGranularHistoryPoint, deleteHistoryPoint, refreshUsdRate } = useApp();
+  const { state, addGranularHistoryPoint, deleteHistoryPoint } = useApp();
   const navigate = useNavigate();
   const { portfolio, allocation_target, retirement } = state;
 
   const [chartView, setChartView] = useState<'line' | 'stacked'>('line');
-  const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
-  const [isFxRefreshing, setIsFxRefreshing] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ── URL Sharing State ──
-  const [sharedState, setSharedState] = useState<Partial<AiPortfolioState> | null>(null);
-  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const formatCurrency = (val: number) => val.toLocaleString();
 
   // 補記與編輯快照相關 State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -173,34 +118,8 @@ export const OverviewPage: React.FC = () => {
       crypto: Math.round(modalCrypto)
     }, modalCumulativeInvestment > 0 ? Math.round(modalCumulativeInvestment) : undefined);
 
-    // 成功通知
-    setBackupMsg({ 
-      type: 'success', 
-      text: modalMode === 'add' 
-        ? `🎉 歷史快照 [${modalDate}] 登錄成功！` 
-        : `🎉 歷史快照 [${modalDate}] 編輯成功！` 
-    });
     setIsModalOpen(false);
-    setTimeout(() => setBackupMsg(null), 4000);
   };
-
-  // [NEW] 最新一期本金與盈餘精算
-  const latestHistoryPoint = useMemo(() => {
-    const history = portfolio.history;
-    return history.length > 0 ? history[history.length - 1] : null;
-  }, [portfolio.history]);
-
-  const latestCumulativeInvestment = useMemo(() => {
-    return latestHistoryPoint?.cumulative_investment ?? totalNetWorth;
-  }, [latestHistoryPoint, totalNetWorth]);
-
-  const totalProfitAmt = useMemo(() => {
-    return totalNetWorth - latestCumulativeInvestment;
-  }, [totalNetWorth, latestCumulativeInvestment]);
-
-  const totalRoi = useMemo(() => {
-    return latestCumulativeInvestment > 0 ? (totalProfitAmt / latestCumulativeInvestment) * 100 : 0;
-  }, [totalProfitAmt, latestCumulativeInvestment]);
 
   // 1.5 帶有 MoM 環比的歷史快照數組 (最新在最前)
   const sortedHistoryWithMoM = useMemo(() => {
@@ -230,28 +149,6 @@ export const OverviewPage: React.FC = () => {
     });
   }, [portfolio.history]);
 
-  // 3. 年化報酬率 (CAGR 粗略估算)
-  const cagrReturn = useMemo(() => {
-    const history = portfolio.history;
-    if (history.length < 2) return 0;
-    
-    const startPoint = history[0];
-    const endPoint = history[history.length - 1];
-    
-    const startDate = new Date(startPoint.date);
-    const endDate = new Date(endPoint.date);
-    
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
-    
-    if (diffYears < 0.05 || startPoint.net_worth <= 0) {
-      return ((endPoint.net_worth - startPoint.net_worth) / startPoint.net_worth);
-    }
-    
-    const cagr = Math.pow(endPoint.net_worth / startPoint.net_worth, 1 / diffYears) - 1;
-    return cagr;
-  }, [portfolio.history]);
-
   // [NEW] 進階風險分析指標
   const sharpeRatio = useMemo(() => calculateSharpeRatio(portfolio.history), [portfolio.history]);
   const maxDrawdown = useMemo(() => calculateMaxDrawdown(portfolio.history), [portfolio.history]);
@@ -260,16 +157,6 @@ export const OverviewPage: React.FC = () => {
   const hasGranularHistory = portfolio.history.filter(p =>
     p.cash !== undefined && p.tw_stock !== undefined
   ).length >= 3;
-
-  // 4. FIRE 進度計算 (FIRE 目標 = monthly_spending * 12 * 25)
-  const fireTarget = useMemo(() => {
-    return retirement.monthly_spending * 12 * 25;
-  }, [retirement.monthly_spending]);
-
-  const firePercent = useMemo(() => {
-    if (fireTarget <= 0) return 0;
-    return (totalNetWorth / fireTarget) * 100;
-  }, [totalNetWorth, fireTarget]);
 
   // 5. 偏離警示
   const deviationAlertMessage = useMemo(() => {
@@ -347,206 +234,10 @@ export const OverviewPage: React.FC = () => {
     };
   }, [portfolio, allocation_target, totalNetWorth]);
 
-  // 備份匯出處理
-  const handleExport = () => {
-    try {
-      const dataStr = JSON.stringify(state, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `ai_portfolio_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      setBackupMsg({ type: 'success', text: '💾 備份檔案已成功匯出並下載！' });
-      setTimeout(() => setBackupMsg(null), 4000);
-    } catch (e) {
-      setBackupMsg({ type: 'error', text: '❌ 匯出備份失敗，請稍後再試。' });
-      setTimeout(() => setBackupMsg(null), 4000);
-    }
-  };
-
-  // 備份導入還原處理
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result;
-        if (typeof text !== 'string') return;
-        const parsed = JSON.parse(text);
-        
-        if (validateImportedState(parsed)) {
-          const confirmRestore = window.confirm(
-            '⚠️ 警告：還原此備份將會完全覆蓋您目前的資產資料、目標比例與退休規劃參數，此操作無法復原。是否確定繼續？'
-          );
-          if (confirmRestore) {
-            importState(parsed);
-            setBackupMsg({ type: 'success', text: '🎉 資料已成功還原！網頁將立即重新整理。' });
-            setTimeout(() => {
-              window.location.reload();
-            }, 1200);
-          }
-        } else {
-          setBackupMsg({ type: 'error', text: '❌ 備份檔格式無效，請確保上傳的是正確的備份 JSON。' });
-          setTimeout(() => setBackupMsg(null), 5000);
-        }
-      } catch (err) {
-        setBackupMsg({ type: 'error', text: '❌ 讀取備份檔案失敗，JSON 解析錯誤。' });
-        setTimeout(() => setBackupMsg(null), 5000);
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = '';
-  };
-
-  // [NEW] 半體頭指標：USD/TWD 区块手動同步處理
-  const handleRefreshFx = async () => {
-    if (isFxRefreshing) return;
-    setIsFxRefreshing(true);
-    const success = await refreshUsdRate();
-    setIsFxRefreshing(false);
-    if (success) {
-      setBackupMsg({ type: 'success', text: `💱 USD/TWD 匯率同步成功！協 ${(portfolio.usdRate ?? 32.2).toFixed(2)}` });
-    } else {
-      setBackupMsg({ type: 'error', text: '❌ 匯率同步失敗，請檢查網絡。' });
-    }
-    setTimeout(() => setBackupMsg(null), 4000);
-  };
-
-  // ═══════════════════════════════════════════════════════════════
-  // URL Share Detection — check for ?share= parameter on mount
-  // ═══════════════════════════════════════════════════════════════
-  useEffect(() => {
-    const decoded = parseShareUrl();
-    if (decoded) {
-      setSharedState(decoded);
-      setShareModalOpen(true);
-    }
-  }, []);
-
-  // ── URL Share Handler ──
-  const handleShare = () => {
-    try {
-      const encoded = encodeStateToUrl(state);
-      const url = buildShareUrl(encoded);
-
-      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
-        navigator.clipboard.writeText(url).then(() => {
-          setBackupMsg({ type: 'success', text: '🔗 分享連結已複製到剪貼簿！' });
-          setTimeout(() => setBackupMsg(null), 4000);
-        }).catch(() => {
-          prompt('請複製此連結分享您的配置：', url);
-          setBackupMsg({ type: 'success', text: '🔗 分享連結已產生！' });
-          setTimeout(() => setBackupMsg(null), 4000);
-        });
-      } else {
-        prompt('請複製此連結分享您的配置：', url);
-        setBackupMsg({ type: 'success', text: '🔗 分享連結已產生！' });
-        setTimeout(() => setBackupMsg(null), 4000);
-      }
-    } catch {
-      setBackupMsg({ type: 'error', text: '❌ 產生分享連結失敗，請稍後再試。' });
-      setTimeout(() => setBackupMsg(null), 5000);
-    }
-  };
-
   return (
     <div className="space-y-8 animate-fade-in duration-300">
-      
-      {/* 財務摘要列 (Overview Bar) 六卡片升級版 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 select-none">
-        
-        {/* 1. 最新淨資產 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-blue-500 col-span-2 sm:col-span-1">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">最新淨資產 (TWD)</span>
-          <span className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight mt-1">
-            ${totalNetWorth.toLocaleString()}
-          </span>
-          <div className="flex flex-wrap items-center gap-1.5 mt-1 select-none">
-            <span className="text-[10px] text-slate-400 font-bold">即時資產市值加總</span>
-            {portfolio.isHoldingMode && (
-              <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 border border-indigo-200/80 px-1 py-0.5 rounded">
-                📊 持股模式
-              </span>
-            )}
-          </div>
-        </Card>
 
-        {/* 2. 累計投入本金 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-slate-400">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計投入本金</span>
-          <span className="text-xl sm:text-2xl font-black text-slate-700 tracking-tight mt-1">
-            ${latestCumulativeInvestment.toLocaleString()}
-          </span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">每月歷史月誌累計儲蓄</span>
-        </Card>
-
-        {/* 3. 累計投資損益 & ROI */}
-        <Card hoverEffect={false} className={`flex flex-col justify-center border-l-4 ${totalProfitAmt >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500'}`}>
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">累計損益與報酬</span>
-          <div className="flex items-baseline gap-1 mt-1 flex-wrap">
-            <span className={`text-xl sm:text-2xl font-black tracking-tight ${totalProfitAmt >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {totalProfitAmt >= 0 ? '+' : ''}${totalProfitAmt.toLocaleString()}
-            </span>
-            <span className={`text-xs font-bold flex items-center ${totalProfitAmt >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-              {totalProfitAmt >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-              {totalRoi.toFixed(1)}%
-            </span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">市值相較本金複利剪刀差</span>
-        </Card>
-
-        {/* 4. 年化報酬率 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-purple-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">CAGR 年化報酬</span>
-          <span className="text-xl sm:text-2xl font-black text-purple-600 tracking-tight mt-1">
-            {(cagrReturn * 100).toFixed(1)}%
-          </span>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">由歷史首尾淨值幾何精算</span>
-        </Card>
-
-        {/* 5. FIRE 進度 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-teal-500">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">FIRE 目標進度</span>
-          <span className="text-xl sm:text-2xl font-black text-teal-600 tracking-tight mt-1">{firePercent.toFixed(1)}%</span>
-          <div className="mt-1.5">
-            <ProgressBar value={firePercent} showText={false} />
-          </div>
-          <span className="text-[10px] text-slate-400 font-bold mt-1">目標：${fireTarget.toLocaleString()}</span>
-        </Card>
-
-        {/* 6. USD/TWD 即時匯率 */}
-        <Card hoverEffect={false} className="flex flex-col justify-center border-l-4 border-l-orange-400">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">USD/TWD 匯率</span>
-            <button
-              onClick={handleRefreshFx}
-              disabled={isFxRefreshing}
-              title="重新拉取 USD/TWD 即時匯率"
-              className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-orange-500 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFxRefreshing ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
-          <span className="text-xl sm:text-2xl font-black text-orange-500 tracking-tight mt-1 tabular-nums">
-            {(portfolio.usdRate ?? 32.2).toFixed(2)}
-          </span>
-          {portfolio.fxLastUpdated ? (
-            <span className="text-[10px] font-bold mt-1 text-emerald-600 flex items-center gap-1 select-none">
-              ⚡ 自動同步 {new Date(portfolio.fxLastUpdated).toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })}
-            </span>
-          ) : (
-            <span className="text-[10px] text-slate-400 font-bold mt-1 select-none">點擊同步</span>
-          )}
-        </Card>
-
-      </div>
+      <PortfolioSummaryCards portfolio={portfolio} formatCurrency={formatCurrency} />
 
       {/* [NEW] Drift Guard 智慧資產偏離警報 / 健康維持橫幅 (Alert Banner Glassmorphism UI) */}
       {totalNetWorth > 0 && (
@@ -939,66 +630,7 @@ export const OverviewPage: React.FC = () => {
             )}
           </Card>
 
-          {/* 下部：資料備份與還原 */}
-          <Card hoverEffect={false} className="flex flex-col bg-white/70 backdrop-blur-md border border-slate-200/80 shadow-md">
-            <div className="flex items-center gap-3 mb-4 select-none">
-              <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <Database className="w-5 h-5" />
-              </span>
-              <div>
-                <h2 className="text-sm font-black text-slate-800">資料備份控制台</h2>
-                <p className="text-[10px] text-slate-400 font-bold">本地數據一鍵下載與備份還原</p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-[11px] leading-relaxed text-slate-500">
-                數據安全儲存於瀏覽器本地空間，建議定期下載備份檔案以防資產歷史丟失。
-              </p>
-
-              {backupMsg && (
-                <div className={`p-2.5 rounded-xl text-[10px] font-bold flex items-center gap-2 select-none ${
-                  backupMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60' : 'bg-rose-50 text-rose-700 border border-rose-200/60'
-                }`}>
-                  {backupMsg.type === 'success' ? <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" /> : <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />}
-                  <span>{backupMsg.text}</span>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1.5">
-                <button
-                  onClick={handleExport}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  匯出備份
-                </button>
-
-                <button
-                  onClick={handleShare}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
-                >
-                  <Share2 className="w-3.5 h-3.5" />
-                  分享我的配置
-                </button>
-
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
-                >
-                  <Upload className="w-3.5 h-3.5 text-indigo-500" />
-                  導入備份
-                </button>
-                <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleImport}
-                  accept=".json"
-                  className="hidden"
-                />
-              </div>
-            </div>
-          </Card>
+          <ShareImportBar />
         </div>
 
       </div>
@@ -1125,8 +757,6 @@ export const OverviewPage: React.FC = () => {
                             const confirmDelete = window.confirm(`⚠️ 您確定要刪除 [${point.date}] 的歷史快照嗎？此操作將會重新精算您的資產曲線與環比數據，且無法復原。`);
                             if (confirmDelete) {
                               deleteHistoryPoint(point.date);
-                              setBackupMsg({ type: 'success', text: `🗑️ 已成功刪除 [${point.date}] 的歷史快照` });
-                              setTimeout(() => setBackupMsg(null), 4000);
                             }
                           }}
                           className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-rose-600 rounded-lg cursor-pointer transition-colors"
@@ -1367,99 +997,6 @@ export const OverviewPage: React.FC = () => {
                   確認儲存
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Share Comparison Active Banner ── */}
-      {sharedState && !shareModalOpen && (
-        <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between">
-          <div className="flex items-center gap-2 text-xs font-bold text-indigo-700">
-            <Share2 className="w-4 h-4" />
-            分享配置對比模式已啟用
-          </div>
-          <button
-            onClick={() => setSharedState(null)}
-            className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 cursor-pointer"
-          >
-            清除對比
-          </button>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════
-          URL Share — Comparison Dialog
-          ═══════════════════════════════════════════════════════════════ */}
-      {shareModalOpen && sharedState && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full mx-4 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-                <Share2 className="w-5 h-5" />
-              </span>
-              <div>
-                <h3 className="text-sm font-black text-slate-800">偵測到分享的配置</h3>
-                <p className="text-[10px] text-slate-400 font-bold">是否要載入作為對比？</p>
-              </div>
-            </div>
-
-            {/* comparison table */}
-            <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2 text-xs font-semibold">
-              <div className="flex justify-between pb-2 border-b border-slate-200">
-                <span className="text-slate-500">項目</span>
-                <span className="text-slate-700">你的配置</span>
-                <span className="text-indigo-700">分享的配置</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">現金</span>
-                <span>${portfolio.cash.toLocaleString()}</span>
-                <span className="text-indigo-600">${(sharedState.portfolio?.cash ?? 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">基金</span>
-                <span>${portfolio.fund.toLocaleString()}</span>
-                <span className="text-indigo-600">${(sharedState.portfolio?.fund ?? 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">台股</span>
-                <span>${portfolio.tw_stock.toLocaleString()}</span>
-                <span className="text-indigo-600">${(sharedState.portfolio?.tw_stock ?? 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">美股</span>
-                <span>${portfolio.us_stock.toLocaleString()}</span>
-                <span className="text-indigo-600">${(sharedState.portfolio?.us_stock ?? 0).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">加密貨幣</span>
-                <span>${portfolio.crypto.toLocaleString()}</span>
-                <span className="text-indigo-600">${(sharedState.portfolio?.crypto ?? 0).toLocaleString()}</span>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => {
-                  setShareModalOpen(false);
-                  setSharedState(null);
-                  window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
-                }}
-                className="flex-1 py-2 px-4 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer hover:bg-slate-50 transition-all"
-              >
-                略過
-              </button>
-              <button
-                onClick={() => {
-                  setShareModalOpen(false);
-                  setBackupMsg({ type: 'success', text: '📊 已載入分享配置作為對比參考！' });
-                  setTimeout(() => setBackupMsg(null), 4000);
-                  window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
-                }}
-                className="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black cursor-pointer transition-all"
-              >
-                載入對比
-              </button>
             </div>
           </div>
         </div>
