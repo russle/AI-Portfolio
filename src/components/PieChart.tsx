@@ -85,6 +85,7 @@ export const PieChart: React.FC<PieChartProps> = ({
             }}
             itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
             formatter={(value: TooltipValueType, name: NameType, entry: TooltipPayloadEntry) => {
+              if (value === undefined) return ['', name];
               const pct = entry.payload.percent;
               return [`$${Number(value).toLocaleString()} 元 (${pct.toFixed(1)}%)`, name];
             }}

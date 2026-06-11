@@ -18,7 +18,37 @@ import {
 } from 'lucide-react';
 
 // ── 還原資料的欄位合法性校驗 ──
-const validateImportedState = (data: Record<string, unknown>): boolean => {
+interface PortfolioShape {
+  cash: number;
+  fund: number;
+  tw_stock: number;
+  us_stock: number;
+  crypto: number;
+  history: unknown[];
+  holdings?: unknown[];
+  isHoldingMode?: boolean;
+}
+
+interface AllocationTargetShape {
+  tw_stock: number;
+  us_stock: number;
+  bond: number;
+  cash: number;
+  crypto: number;
+}
+
+interface RetirementShape {
+  age: number;
+  monthly_spending: number;
+  monthly_invest: number;
+  expected_return: number;
+  inflation: number;
+  life_expectancy: number;
+  cape_ratio: number;
+  spending_smile: boolean;
+}
+
+const validateImportedState = (data: Record<string, unknown>): data is { portfolio: PortfolioShape; allocation_target: AllocationTargetShape; retirement: RetirementShape } => {
   if (!data || typeof data !== 'object') return false;
   if (!data.portfolio || !data.allocation_target || !data.retirement) return false;
 
@@ -50,7 +80,10 @@ const validateImportedState = (data: Record<string, unknown>): boolean => {
     typeof retirement.monthly_spending !== 'number' ||
     typeof retirement.monthly_invest !== 'number' ||
     typeof retirement.expected_return !== 'number' ||
-    typeof retirement.inflation !== 'number'
+    typeof retirement.inflation !== 'number' ||
+    typeof retirement.life_expectancy !== 'number' ||
+    typeof retirement.cape_ratio !== 'number' ||
+    typeof retirement.spending_smile !== 'boolean'
   ) return false;
 
   return true;
@@ -86,6 +119,9 @@ function importStateFromUrl(stateStr: string, importState: (state: AiPortfolioSt
       monthly_invest: decoded.retirement?.monthly_invest ?? 20000,
       expected_return: decoded.retirement?.expected_return ?? 0.06,
       inflation: decoded.retirement?.inflation ?? 0.02,
+      life_expectancy: decoded.retirement?.life_expectancy ?? 85,
+      cape_ratio: decoded.retirement?.cape_ratio ?? 30,
+      spending_smile: decoded.retirement?.spending_smile ?? false,
     },
   };
   importState(fullState);

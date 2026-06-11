@@ -66,11 +66,6 @@ export const StressTestPage: React.FC = () => {
     return [];
   }, [selectedRegime, portfolio, retirement, retireAge, currentAge]);
 
-  const totalAssets = useMemo(
-    () => portfolio.cash + portfolio.fund + portfolio.tw_stock + portfolio.us_stock + portfolio.crypto,
-    [portfolio]
-  );
-
   // ── 事件處理 ──
   const handleSelect = (id: SelectableRegime) => {
     setSelectedRegime(id);
@@ -362,8 +357,8 @@ export const StressTestPage: React.FC = () => {
                             borderRadius: '12px',
                             fontSize: '12px',
                           }}
-                          formatter={(value: number) => [formatAmount(value), '資產價值']}
-                          labelFormatter={(label: number) => `第 ${label} 年`}
+                          formatter={(value: number | undefined) => value !== undefined ? [formatAmount(value), '資產價值'] : ['', '資產價值']}
+                          labelFormatter={(label: number | string) => `第 ${label} 年`}
                         />
                         <Area
                           type="monotone"

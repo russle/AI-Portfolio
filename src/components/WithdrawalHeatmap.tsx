@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import type { WithdrawalHeatmap, HeatmapCell } from '../utils/retirement';
+import type { WithdrawalHeatmap as WithdrawalHeatmapData, HeatmapCell } from '../utils/retirement';
 
 interface Props {
-  data: WithdrawalHeatmap;
+  data: WithdrawalHeatmapData;
   currentReturnRate: number;
 }
 

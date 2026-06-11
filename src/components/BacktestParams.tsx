@@ -41,7 +41,6 @@ export const BacktestParams: React.FC<BacktestParamsProps> = ({
   setWindowMonths,
   stepMonths,
   setStepMonths,
-  targetAllocationSum,
   executeBacktest,
   isLoading,
 }) => {

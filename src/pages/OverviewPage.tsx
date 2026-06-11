@@ -27,6 +27,9 @@ import {
   Activity,
   TrendingDown,
   BarChart2,
+  CheckCircle,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
 import { ShareImportBar } from '../components/ShareImportBar';
 import { PortfolioSummaryCards } from '../components/PortfolioSummaryCards';
@@ -34,7 +37,7 @@ import { PortfolioSummaryCards } from '../components/PortfolioSummaryCards';
 export const OverviewPage: React.FC = () => {
   const { state, addGranularHistoryPoint, deleteHistoryPoint } = useApp();
   const navigate = useNavigate();
-  const { portfolio, allocation_target, retirement } = state;
+  const { portfolio, allocation_target } = state;
 
   const [chartView, setChartView] = useState<'line' | 'stacked'>('line');
 
