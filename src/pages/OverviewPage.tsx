@@ -1,6 +1,7 @@
-import React, { useMemo, useState, useRef } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import type { AiPortfolioState } from '../context/AppContext';
 import { Card } from '../components/Card';
 import { ProgressBar } from '../components/ProgressBar';
 import { LineChart } from '../components/LineChart';
@@ -32,8 +33,14 @@ import {
   Trash2,
   Activity,
   TrendingDown,
-  BarChart2
+  BarChart2,
+  Share2
 } from 'lucide-react';
+import {
+  encodeStateToUrl,
+  buildShareUrl,
+  parseShareUrl,
+} from '../utils/shareUtils';
 
 // 還原資料的欄位合法性校驗
 const validateImportedState = (data: any): boolean => {
@@ -83,6 +90,10 @@ export const OverviewPage: React.FC = () => {
   const [backupMsg, setBackupMsg] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   const [isFxRefreshing, setIsFxRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ── URL Sharing State ──
+  const [sharedState, setSharedState] = useState<Partial<AiPortfolioState> | null>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   // 補記與編輯快照相關 State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -406,6 +417,43 @@ export const OverviewPage: React.FC = () => {
       setBackupMsg({ type: 'error', text: '❌ 匯率同步失敗，請檢查網絡。' });
     }
     setTimeout(() => setBackupMsg(null), 4000);
+  };
+
+  // ═══════════════════════════════════════════════════════════════
+  // URL Share Detection — check for ?share= parameter on mount
+  // ═══════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const decoded = parseShareUrl();
+    if (decoded) {
+      setSharedState(decoded);
+      setShareModalOpen(true);
+    }
+  }, []);
+
+  // ── URL Share Handler ──
+  const handleShare = () => {
+    try {
+      const encoded = encodeStateToUrl(state);
+      const url = buildShareUrl(encoded);
+
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        navigator.clipboard.writeText(url).then(() => {
+          setBackupMsg({ type: 'success', text: '🔗 分享連結已複製到剪貼簿！' });
+          setTimeout(() => setBackupMsg(null), 4000);
+        }).catch(() => {
+          prompt('請複製此連結分享您的配置：', url);
+          setBackupMsg({ type: 'success', text: '🔗 分享連結已產生！' });
+          setTimeout(() => setBackupMsg(null), 4000);
+        });
+      } else {
+        prompt('請複製此連結分享您的配置：', url);
+        setBackupMsg({ type: 'success', text: '🔗 分享連結已產生！' });
+        setTimeout(() => setBackupMsg(null), 4000);
+      }
+    } catch {
+      setBackupMsg({ type: 'error', text: '❌ 產生分享連結失敗，請稍後再試。' });
+      setTimeout(() => setBackupMsg(null), 5000);
+    }
   };
 
   return (
@@ -917,13 +965,21 @@ export const OverviewPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-3 pt-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1.5">
                 <button
                   onClick={handleExport}
                   className="flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
                 >
                   <Download className="w-3.5 h-3.5" />
                   匯出備份
+                </button>
+
+                <button
+                  onClick={handleShare}
+                  className="flex items-center justify-center gap-1.5 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[11px] font-black cursor-pointer shadow-sm transition-all hover:scale-[1.02]"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  分享我的配置
                 </button>
 
                 <button
@@ -1311,6 +1367,99 @@ export const OverviewPage: React.FC = () => {
                   確認儲存
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Share Comparison Active Banner ── */}
+      {sharedState && !shareModalOpen && (
+        <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2 text-xs font-bold text-indigo-700">
+            <Share2 className="w-4 h-4" />
+            分享配置對比模式已啟用
+          </div>
+          <button
+            onClick={() => setSharedState(null)}
+            className="text-[10px] font-black text-indigo-500 hover:text-indigo-700 cursor-pointer"
+          >
+            清除對比
+          </button>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          URL Share — Comparison Dialog
+          ═══════════════════════════════════════════════════════════════ */}
+      {shareModalOpen && sharedState && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Share2 className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="text-sm font-black text-slate-800">偵測到分享的配置</h3>
+                <p className="text-[10px] text-slate-400 font-bold">是否要載入作為對比？</p>
+              </div>
+            </div>
+
+            {/* comparison table */}
+            <div className="bg-slate-50 rounded-xl p-4 mb-4 space-y-2 text-xs font-semibold">
+              <div className="flex justify-between pb-2 border-b border-slate-200">
+                <span className="text-slate-500">項目</span>
+                <span className="text-slate-700">你的配置</span>
+                <span className="text-indigo-700">分享的配置</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">現金</span>
+                <span>${portfolio.cash.toLocaleString()}</span>
+                <span className="text-indigo-600">${(sharedState.portfolio?.cash ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">基金</span>
+                <span>${portfolio.fund.toLocaleString()}</span>
+                <span className="text-indigo-600">${(sharedState.portfolio?.fund ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">台股</span>
+                <span>${portfolio.tw_stock.toLocaleString()}</span>
+                <span className="text-indigo-600">${(sharedState.portfolio?.tw_stock ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">美股</span>
+                <span>${portfolio.us_stock.toLocaleString()}</span>
+                <span className="text-indigo-600">${(sharedState.portfolio?.us_stock ?? 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">加密貨幣</span>
+                <span>${portfolio.crypto.toLocaleString()}</span>
+                <span className="text-indigo-600">${(sharedState.portfolio?.crypto ?? 0).toLocaleString()}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShareModalOpen(false);
+                  setSharedState(null);
+                  window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
+                }}
+                className="flex-1 py-2 px-4 bg-white border border-slate-200 text-slate-700 rounded-xl text-xs font-black cursor-pointer hover:bg-slate-50 transition-all"
+              >
+                略過
+              </button>
+              <button
+                onClick={() => {
+                  setShareModalOpen(false);
+                  setBackupMsg({ type: 'success', text: '📊 已載入分享配置作為對比參考！' });
+                  setTimeout(() => setBackupMsg(null), 4000);
+                  window.history.replaceState({}, '', `${window.location.pathname}${window.location.hash.split('?')[0]}`);
+                }}
+                className="flex-1 py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-black cursor-pointer transition-all"
+              >
+                載入對比
+              </button>
             </div>
           </div>
         </div>

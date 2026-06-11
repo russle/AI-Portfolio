@@ -7,8 +7,11 @@ import { RebalancePage } from './pages/RebalancePage';
 import { RetirementPage } from './pages/RetirementPage';
 import { OrderPage } from './pages/OrderPage';
 import { ScenarioPage } from './pages/ScenarioPage';
+import { StressTestPage } from './pages/StressTestPage';
 import { BacktestPage } from './pages/BacktestPage';
+import { EfficientFrontierPage } from './pages/EfficientFrontierPage';
 import { FamilyPlanner } from './pages/FamilyPlanner';
+import { OnboardingWizard } from './components/OnboardingWizard';
 import { 
   PieChart, 
   Database, 
@@ -22,7 +25,9 @@ import {
   X,
   DollarSign,
   History,
-  Users
+  Users,
+  FlaskConical,
+  BarChart3
 } from 'lucide-react';
 
 // 全站 Navbar 導航與狀態燈元件
@@ -61,7 +66,9 @@ const Navbar: React.FC = () => {
     { to: '/family', label: '家庭規劃', icon: <Users className="w-4 h-4" /> },
     { to: '/order', label: '下單股數', icon: <DollarSign className="w-4 h-4" /> },
     { to: '/backtest', label: '歷史回測', icon: <History className="w-4 h-4" /> },
+    { to: '/frontier', label: '效率前緣', icon: <BarChart3 className="w-4 h-4" /> },
     { to: '/scenario', label: '壓力測試', icon: <ShieldAlert className="w-4 h-4" /> },
+    { to: '/stresstest', label: '脫水測試', icon: <FlaskConical className="w-4 h-4" /> },
   ];
 
   return (
@@ -191,7 +198,9 @@ const MobileTabBar: React.FC = () => {
     { to: '/family', label: '家庭', icon: <Users className="w-5 h-5" /> },
     { to: '/order', label: '下單', icon: <DollarSign className="w-5 h-5" /> },
     { to: '/backtest', label: '回測', icon: <History className="w-5 h-5" /> },
+    { to: '/frontier', label: '前緣', icon: <BarChart3 className="w-5 h-5" /> },
     { to: '/scenario', label: '壓測', icon: <ShieldAlert className="w-5 h-5" /> },
+    { to: '/stresstest', label: '脫水', icon: <FlaskConical className="w-5 h-5" /> },
   ];
 
   return (
@@ -223,6 +232,7 @@ export const AppContent: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-tr from-sky-50/20 via-white to-slate-50/40 text-slate-800 flex flex-col font-sans selection:bg-blue-500/20 selection:text-blue-800">
       <Navbar />
+      <OnboardingWizard />
 
       {/* 核心多路由頁面渲染區 */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 lg:pb-8">
@@ -234,7 +244,9 @@ export const AppContent: React.FC = () => {
           <Route path="/family" element={<FamilyPlanner />} />
           <Route path="/order" element={<OrderPage />} />
           <Route path="/scenario" element={<ScenarioPage />} />
+          <Route path="/stresstest" element={<StressTestPage />} />
           <Route path="/backtest" element={<BacktestPage />} />
+          <Route path="/frontier" element={<EfficientFrontierPage />} />
         </Routes>
       </main>
 

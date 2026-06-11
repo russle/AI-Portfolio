@@ -338,7 +338,103 @@ export const runFullLifeMonteCarloSimulation = (
   };
 };
 
+// ============================================================
+// 退休提領壓力熱圖 (Withdrawal Stress Map) 資料生成
+// ============================================================
+
+export interface HeatmapCell {
+  returnRate: number;      // 實質報酬率假設 (e.g., -0.03, 0, 0.07)
+  yearsAfterRetire: number; // 退休後第幾年
+  assetRemaining: number;   // 剩餘資產 (四捨五入至整數)
+  status: 'safe' | 'warning' | 'depleted';
+}
+
+export interface WithdrawalHeatmap {
+  rows: number[];     // 報酬率網格 [-0.05, -0.04, ..., 0.15]
+  cols: number[];     // 退休後年數 [0, 1, 2, ..., maxYears]
+  data: HeatmapCell[][];  // [rowIdx][colIdx]
+  depletionRowAtYear: (year: number) => number | null;
+}
+
+/**
+ * 生成退休提領壓力熱圖 (確定性模擬，非蒙地卡羅)
+ *
+ * 遍歷不同報酬率假設 x 退休年數，計算每種情境下的剩餘資產，
+ * 並標示 safe / warning / depleted 狀態，讓使用者直觀看到
+ * 在哪些市場條件下退休金會面臨枯竭風險。
+ */
+export function generateWithdrawalHeatmap(
+  currentAsset: number,
+  monthlySpending: number,
+  inflation: number,
+  _expectedReturn: number,
+  maxAge: number,
+  retireAge: number
+): WithdrawalHeatmap {
+  const annualSpending = monthlySpending * 12;
+  const maxYears = Math.max(1, maxAge - retireAge);
+
+  // 1. 報酬率網格: -5% ~ 15%, step 1% (21 行)
+  const rows: number[] = [];
+  for (let r = -5; r <= 15; r++) {
+    rows.push(r / 100);
+  }
+
+  // 2. 年數網格: 0 ~ maxYears
+  const cols: number[] = [];
+  for (let y = 0; y <= maxYears; y++) {
+    cols.push(y);
+  }
+
+  // 3. 確定性模擬計算每個 cell
+  const data: HeatmapCell[][] = rows.map((rate) => {
+    return cols.map((year) => {
+      let asset = currentAsset;
+
+      for (let y = 1; y <= year; y++) {
+        // 每年: 資產增值 → 扣除年支出 → 通膨調整 (實質購買力)
+        asset = (asset * (1 + rate) - annualSpending) / (1 + inflation);
+        if (asset <= 0) {
+          asset = 0;
+          break;
+        }
+      }
+
+      asset = Math.max(0, Math.round(asset));
+
+      let status: HeatmapCell['status'];
+      if (asset <= 0) {
+        status = 'depleted';
+      } else if (asset < currentAsset * 0.5) {
+        status = 'warning';
+      } else {
+        status = 'safe';
+      }
+
+      return { returnRate: rate, yearsAfterRetire: year, assetRemaining: asset, status };
+    });
+  });
+
+  // 4. 查詢: 在某一年，哪個報酬率以下會歸零
+  const depletionRowAtYear = (year: number): number | null => {
+    const colIdx = cols.indexOf(year);
+    if (colIdx === -1) return null;
+
+    // 從最高報酬率往下掃，找到第一個 depleted 的 cell
+    for (let rowIdx = rows.length - 1; rowIdx >= 0; rowIdx--) {
+      if (data[rowIdx][colIdx].status === 'depleted') {
+        return rows[rowIdx];
+      }
+    }
+    return null;
+  };
+
+  return { rows, cols, data, depletionRowAtYear };
+}
+
+// ============================================================
 // [NEW] 歷史黑天鵝危機大類年度收益矩陣 (10年)
+// ============================================================
 const CRISIS_YEARLY_RETURNS: Record<
   'tech_2000' | 'financial_2008' | 'inflation_2022',
   {

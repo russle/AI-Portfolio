@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Card } from '../components/Card';
-import { runBacktest, CRISIS_EVENTS } from '../utils/backtest';
-import type { BacktestResult } from '../utils/backtest';
+import { runBacktest, runRollingBacktest, CRISIS_EVENTS } from '../utils/backtest';
+import type { BacktestResult, RollingBacktestResult } from '../utils/backtest';
 import { 
   Play, 
   TrendingUp, 
@@ -17,7 +17,8 @@ import {
   Layers,
   CheckCircle,
   HelpCircle,
-  Coins
+  Coins,
+  SlidersHorizontal 
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,6 +49,11 @@ export const BacktestPage: React.FC = () => {
     fund: 'BND',
     crypto: 'BTC-USD'
   });
+
+  const [backtestMode, setBacktestMode] = useState<'single' | 'rolling'>('single');
+  const [windowMonths, setWindowMonths] = useState<number>(84);
+  const [stepMonths, setStepMonths] = useState<number>(3);
+  const [rollingResult, setRollingResult] = useState<RollingBacktestResult | null>(null);
 
   // 動態精算當前真實持股的大類佔比
   const actualAllocation = useMemo(() => {
@@ -105,16 +111,33 @@ export const BacktestPage: React.FC = () => {
 
       const actualAllocParam = (portfolio.isHoldingMode && actualAllocation) ? actualAllocation : undefined;
 
-      const res = await runBacktest(
-        allocation_target,
-        symbols,
-        targetRange,
-        targetInitial,
-        targetMonthly,
-        targetFreq,
-        actualAllocParam // 傳入真實配置大類佔比
-      );
-      setBacktestResult(res);
+      if (backtestMode === 'rolling') {
+        const targetRange = range === '1y' || range === '3y' ? '5y' : range;
+        const res = await runRollingBacktest(
+          allocation_target,
+          symbols,
+          targetRange as '5y' | '10y',
+          targetInitial,
+          targetMonthly,
+          targetFreq,
+          windowMonths,
+          stepMonths
+        );
+        setRollingResult(res);
+        setBacktestResult(null);
+      } else {
+        const res = await runBacktest(
+          allocation_target,
+          symbols,
+          targetRange,
+          targetInitial,
+          targetMonthly,
+          targetFreq,
+          actualAllocParam
+        );
+        setBacktestResult(res);
+        setRollingResult(null);
+      }
     } catch (err: any) {
       setError(err?.message || '回測執行失敗，請檢查標的代號或網路連線！');
     } finally {
@@ -350,6 +373,71 @@ export const BacktestPage: React.FC = () => {
                   * 預設標的包含完整 10 年離線備份，輸入自訂代號時若遇 CORS 限制，將自動無感啟用高精度離線 fallback，保證系統流暢穩定。
                 </p>
               </div>
+
+              {/* 回測模式切換 */}
+              <div className="pt-3 border-t border-slate-100">
+                <label className="block text-[11px] font-bold text-slate-500 mb-2.5 flex items-center gap-1.5">
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                  回測模式
+                </label>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl">
+                  <button
+                    onClick={() => { setBacktestMode('single'); setRollingResult(null); }}
+                    className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                      backtestMode === 'single'
+                        ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    單一回測
+                  </button>
+                  <button
+                    onClick={() => { setBacktestMode('rolling'); setBacktestResult(null); }}
+                    className={`py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                      backtestMode === 'rolling'
+                        ? 'bg-white text-blue-600 shadow-md scale-[1.02]'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    滾動回測
+                  </button>
+                </div>
+              </div>
+
+              {/* 滾動參數設定 */}
+              {backtestMode === 'rolling' && (
+                <div className="space-y-4 animate-fade-in pt-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-2">
+                      視窗大小: {windowMonths} 個月 ({Math.round(windowMonths/12)} 年)
+                    </label>
+                    <input type="range" min="36" max="120" value={windowMonths}
+                      onChange={(e) => setWindowMonths(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer" />
+                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-0.5">
+                      <span>3 年</span>
+                      <span>7 年</span>
+                      <span>10 年</span>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 mb-2">
+                      步長: {stepMonths} 個月
+                    </label>
+                    <input type="range" min="1" max="12" value={stepMonths}
+                      onChange={(e) => setStepMonths(Number(e.target.value))}
+                      className="w-full accent-blue-600 cursor-pointer" />
+                    <div className="flex justify-between text-[9px] text-slate-400 font-bold mt-0.5">
+                      <span>1 月</span>
+                      <span>6 月</span>
+                      <span>12 月</span>
+                    </div>
+                  </div>
+                  <p className="text-[9px] text-slate-400 font-medium leading-relaxed bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
+                    💡 滾動回測會以不同時間窗口反覆驗證策略穩定性，視窗越大越能反映長期表現，步長越小樣本越多。
+                  </p>
+                </div>
+              )}
 
               {/* 執行按鈕 */}
               <button
@@ -707,6 +795,77 @@ export const BacktestPage: React.FC = () => {
           </Card>
 
         </div>
+
+        {/* 滾動回測結果 */}
+        {rollingResult && (
+          <div className="lg:col-span-3">
+            <Card className="p-6">
+              <h3 className="font-bold text-slate-700 text-sm mb-4 flex items-center gap-2">
+                🔄 滾動回測績效分布
+                <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {rollingResult.windows.length} 個窗口
+                </span>
+              </h3>
+              
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-6">
+                <div className="p-3 bg-blue-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">中位數 CAGR</div>
+                  <div className="text-lg font-black text-blue-600">{rollingResult.medianPortfolioCagr.toFixed(1)}%</div>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">最差 CAGR</div>
+                  <div className="text-lg font-black text-rose-600">{rollingResult.worstPortfolioCagr.toFixed(1)}%</div>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">最佳 CAGR</div>
+                  <div className="text-lg font-black text-emerald-600">{rollingResult.bestPortfolioCagr.toFixed(1)}%</div>
+                </div>
+                <div className="p-3 bg-amber-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">P5 CAGR</div>
+                  <div className="text-lg font-black text-amber-600">{rollingResult.pctl5PortfolioCagr.toFixed(1)}%</div>
+                </div>
+                <div className="p-3 bg-emerald-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">P95 CAGR</div>
+                  <div className="text-lg font-black text-emerald-600">{rollingResult.pctl95PortfolioCagr.toFixed(1)}%</div>
+                </div>
+                <div className="p-3 bg-rose-50 rounded-xl">
+                  <div className="text-[9px] font-bold text-slate-400">最差回撤</div>
+                  <div className="text-lg font-black text-rose-600">{rollingResult.worstPortfolioDd.toFixed(1)}%</div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[9px] font-bold text-slate-400 uppercase">
+                      <th className="pb-2">#</th>
+                      <th className="pb-2">區間</th>
+                      <th className="pb-2 text-right">配置 CAGR</th>
+                      <th className="pb-2 text-right">對照組 CAGR</th>
+                      <th className="pb-2 text-right">配置回撤</th>
+                      <th className="pb-2 text-right">對照組回撤</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rollingResult.windows.map((w, i) => (
+                      <tr key={i} className="hover:bg-slate-50">
+                        <td className="py-2 font-bold text-slate-500">{i + 1}</td>
+                        <td className="py-2 text-slate-500 font-medium">{w.startDate} ~ {w.endDate}</td>
+                        <td className="py-2 text-right font-bold text-blue-600">{w.portfolio.cagr.toFixed(1)}%</td>
+                        <td className="py-2 text-right text-slate-500">{w.benchmark.cagr.toFixed(1)}%</td>
+                        <td className="py-2 text-right text-rose-500">{w.portfolio.maxDrawdown.toFixed(1)}%</td>
+                        <td className="py-2 text-right text-slate-500">{w.benchmark.maxDrawdown.toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="text-[9px] text-slate-400 mt-3 font-medium">
+                  共 {rollingResult.windows.length} 個滑動窗口 · 每個窗口 {windowMonths} 個月 ({Math.round(windowMonths/12)} 年) · 步長 {stepMonths} 個月
+                </p>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
 
       {/* 下方：重大危機壓力測試對決看板 */}

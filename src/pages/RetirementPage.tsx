@@ -8,8 +8,10 @@ import {
   runMonteCarloSimulation as runMonteCarlo, 
   assessRetirementFeasibility as assessFeasibility, 
   runFullLifeMonteCarloSimulation,
-  runRetirementCrisisBacktest // [NEW] 引入危機回測
+  runRetirementCrisisBacktest,
+  generateWithdrawalHeatmap // [NEW] 退休壓力熱圖
 } from '../utils/retirement';
+import { WithdrawalHeatmap } from '../components/WithdrawalHeatmap';
 import { calculateSpendingForDieToZero } from '../utils/formulas';
 import { AlertTriangle } from 'lucide-react';
 
@@ -228,6 +230,16 @@ export const RetirementPage: React.FC = () => {
     { key: 'p50', name: '預期中位數 (P50)', stroke: '#3b82f6' },
     { key: 'p5', name: '保守下限 (P5)', stroke: '#ef4444' }
   ];
+
+  // [NEW] 退休提領壓力熱圖資料
+  const heatmapData = useMemo(() => generateWithdrawalHeatmap(
+    currentAsset,
+    retirement.monthly_spending,
+    retirement.inflation,
+    retirement.expected_return,
+    retirement.life_expectancy ?? 85,
+    targetRetirementAge
+  ), [currentAsset, retirement.monthly_spending, retirement.inflation, retirement.expected_return, retirement.life_expectancy, targetRetirementAge]);
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
@@ -720,6 +732,15 @@ export const RetirementPage: React.FC = () => {
             height={320}
           />
         </div>
+      </Card>
+
+      {/* 📊 退休提領壓力熱圖 */}
+      <Card className="p-6">
+        <div className="mb-4">
+          <h3 className="font-bold text-slate-700 text-sm tracking-wide">📊 退休提領壓力熱圖 (Withdrawal Stress Map)</h3>
+          <p className="text-xs text-slate-400 mt-1">在不同市場報酬率假設下，您的退休金能安全支撐多久</p>
+        </div>
+        <WithdrawalHeatmap data={heatmapData} currentReturnRate={retirement.expected_return} />
       </Card>
 
       {/* 各年齡層退休可行性評估 */}

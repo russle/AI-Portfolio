@@ -440,6 +440,83 @@ const evaluateCrisisPerformance = (
 };
 
 /**
+ * 滑動視窗模擬輔助函式：使用預提取的價格資料模擬單一配置的績效
+ */
+function simulateWindowFromPrices(
+  months: string[],
+  twPrices: Record<string, number>,
+  usPrices: Record<string, number>,
+  fundPrices: Record<string, number>,
+  cryptoPrices: Record<string, number>,
+  allocation: AllocationTarget,
+  initialAmount: number,
+  monthlyInvest: number,
+  rebalanceFreq: 'none' | 'monthly' | 'yearly'
+): PerformanceMetrics {
+  let portShares = {
+    tw_stock: 0,
+    us_stock: 0,
+    fund: 0,
+    crypto: 0
+  };
+  let portCash = 0;
+  let totalInvested = initialAmount;
+  const cashMonthlyRate = Math.pow(1.015, 1 / 12) - 1;
+
+  const portfolioValues: number[] = [];
+  const investedAmounts: number[] = [];
+
+  for (let t = 0; t < months.length; t++) {
+    const month = months[t];
+
+    const pTw = twPrices[month];
+    const pUs = usPrices[month];
+    const pFund = fundPrices[month];
+    const pCrypto = cryptoPrices[month];
+
+    if (t === 0) {
+      portShares.tw_stock = (initialAmount * allocation.tw_stock) / pTw;
+      portShares.us_stock = (initialAmount * allocation.us_stock) / pUs;
+      portShares.fund = (initialAmount * allocation.bond) / pFund;
+      portShares.crypto = (initialAmount * allocation.crypto) / pCrypto;
+      portCash = initialAmount * allocation.cash;
+    } else {
+      totalInvested += monthlyInvest;
+
+      portShares.tw_stock += (monthlyInvest * allocation.tw_stock) / pTw;
+      portShares.us_stock += (monthlyInvest * allocation.us_stock) / pUs;
+      portShares.fund += (monthlyInvest * allocation.bond) / pFund;
+      portShares.crypto += (monthlyInvest * allocation.crypto) / pCrypto;
+
+      portCash = portCash * (1 + cashMonthlyRate) + (monthlyInvest * allocation.cash);
+    }
+
+    const portVal =
+      (portShares.tw_stock * pTw) +
+      (portShares.us_stock * pUs) +
+      (portShares.fund * pFund) +
+      (portShares.crypto * pCrypto) +
+      portCash;
+
+    const isYearlyRebalance = rebalanceFreq === 'yearly' && t > 0 && t % 12 === 0;
+    const isMonthlyRebalance = rebalanceFreq === 'monthly' && t > 0;
+
+    if (isYearlyRebalance || isMonthlyRebalance) {
+      portShares.tw_stock = (portVal * allocation.tw_stock) / pTw;
+      portShares.us_stock = (portVal * allocation.us_stock) / pUs;
+      portShares.fund = (portVal * allocation.bond) / pFund;
+      portShares.crypto = (portVal * allocation.crypto) / pCrypto;
+      portCash = portVal * allocation.cash;
+    }
+
+    portfolioValues.push(portVal);
+    investedAmounts.push(totalInvested);
+  }
+
+  return calculateMetricsForSeries(portfolioValues, investedAmounts, months.length);
+}
+
+/**
  * 核心回測模擬演算引擎
  */
 export const runBacktest = async (
@@ -647,3 +724,121 @@ export const runBacktest = async (
     crisisMetrics
   };
 };
+
+/**
+ * 百分位數計算輔助
+ */
+function percentile(sorted: number[], p: number): number {
+  const index = Math.ceil(p / 100 * sorted.length) - 1;
+  return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
+}
+
+export interface RollingWindowMetrics {
+  startDate: string;
+  endDate: string;
+  portfolio: PerformanceMetrics;
+  benchmark: PerformanceMetrics;
+}
+
+export interface RollingBacktestResult {
+  windows: RollingWindowMetrics[];
+  allPortfolioCagr: number[];
+  allBenchmarkCagr: number[];
+  medianPortfolioCagr: number;
+  medianBenchmarkCagr: number;
+  worstPortfolioCagr: number;
+  bestPortfolioCagr: number;
+  worstPortfolioDd: number;
+  pctl5PortfolioCagr: number;
+  pctl95PortfolioCagr: number;
+}
+
+/**
+ * 滾動視窗回測：用滑動窗口的方式檢驗不同時期進場的績效分布
+ */
+export async function runRollingBacktest(
+  allocation: AllocationTarget,
+  symbols: { tw_stock: string; us_stock: string; fund: string; crypto: string },
+  range: '5y' | '10y',
+  initialAmount: number,
+  monthlyInvest: number,
+  rebalanceFreq: 'none' | 'monthly' | 'yearly',
+  windowMonths: number,
+  stepMonths: number
+): Promise<RollingBacktestResult> {
+  const twPrices = await fetchHistoricalPrices(symbols.tw_stock, range) || FALLBACK_HISTORICAL_DATA['0050.TW'];
+  const usPrices = await fetchHistoricalPrices(symbols.us_stock, range) || FALLBACK_HISTORICAL_DATA['VT'];
+  const fundPrices = await fetchHistoricalPrices(symbols.fund, range) || FALLBACK_HISTORICAL_DATA['BND'];
+  const cryptoPrices = await fetchHistoricalPrices(symbols.crypto, range) || FALLBACK_HISTORICAL_DATA['BTC-USD'];
+
+  const twKeys = Object.keys(twPrices);
+  const usKeys = Object.keys(usPrices);
+  const fundKeys = Object.keys(fundPrices);
+  const cryptoKeys = Object.keys(cryptoPrices);
+
+  const commonMonths = twKeys
+    .filter(k => usKeys.includes(k) && fundKeys.includes(k) && cryptoKeys.includes(k))
+    .sort();
+
+  if (commonMonths.length < windowMonths) {
+    throw new Error(`可用月份數 (${commonMonths.length}) 小於窗口長度 (${windowMonths})，無法執行滾動回測`);
+  }
+
+  const benchmarkAllocation: AllocationTarget = {
+    tw_stock: 1,
+    us_stock: 0,
+    bond: 0,
+    cash: 0,
+    crypto: 0
+  };
+
+  const windows: RollingWindowMetrics[] = [];
+  const allPortfolioCagr: number[] = [];
+  const allBenchmarkCagr: number[] = [];
+  let worstPortfolioDd = 0;
+
+  for (let i = 0; i + windowMonths <= commonMonths.length; i += stepMonths) {
+    const windowMonthsSlice = commonMonths.slice(i, i + windowMonths);
+
+    const portfolio = simulateWindowFromPrices(
+      windowMonthsSlice, twPrices, usPrices, fundPrices, cryptoPrices,
+      allocation, initialAmount, monthlyInvest, rebalanceFreq
+    );
+
+    const benchmark = simulateWindowFromPrices(
+      windowMonthsSlice, twPrices, usPrices, fundPrices, cryptoPrices,
+      benchmarkAllocation, initialAmount, monthlyInvest, rebalanceFreq
+    );
+
+    windows.push({
+      startDate: windowMonthsSlice[0],
+      endDate: windowMonthsSlice[windowMonthsSlice.length - 1],
+      portfolio,
+      benchmark
+    });
+
+    allPortfolioCagr.push(portfolio.cagr);
+    allBenchmarkCagr.push(benchmark.cagr);
+    if (portfolio.maxDrawdown < worstPortfolioDd) {
+      worstPortfolioDd = portfolio.maxDrawdown;
+    }
+  }
+
+  const sortedPortfolioCagr = [...allPortfolioCagr].sort((a, b) => a - b);
+  const sortedBenchmarkCagr = [...allBenchmarkCagr].sort((a, b) => a - b);
+
+  const len = sortedPortfolioCagr.length;
+
+  return {
+    windows,
+    allPortfolioCagr,
+    allBenchmarkCagr,
+    medianPortfolioCagr: sortedPortfolioCagr[Math.floor(len / 2)],
+    medianBenchmarkCagr: sortedBenchmarkCagr[Math.floor(len / 2)],
+    worstPortfolioCagr: sortedPortfolioCagr[0],
+    bestPortfolioCagr: sortedPortfolioCagr[len - 1],
+    worstPortfolioDd,
+    pctl5PortfolioCagr: percentile(sortedPortfolioCagr, 5),
+    pctl95PortfolioCagr: percentile(sortedPortfolioCagr, 95)
+  };
+}
