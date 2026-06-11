@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState, HoldingItem } from '../context/AppContext';
+import type { AiPortfolioState, HoldingItem, PortfolioHistoryPoint } from '../context/AppContext';
 import {
   encodeStateToUrl,
   buildShareUrl,
@@ -24,7 +24,7 @@ interface PortfolioShape {
   tw_stock: number;
   us_stock: number;
   crypto: number;
-  history: unknown[];
+  history: PortfolioHistoryPoint[];
   holdings?: HoldingItem[];
   isHoldingMode?: boolean;
 }
@@ -77,6 +77,16 @@ const validateImportedState = (data: Record<string, unknown>): data is Validated
     typeof p.crypto !== 'number' ||
     !Array.isArray(p.history)
   ) return false;
+
+  // Validate each history point has required fields
+  for (const h of p.history) {
+    if (!h || typeof h !== 'object') return false;
+    const point = h as Record<string, unknown>;
+    if (
+      typeof point.date !== 'string' ||
+      typeof point.net_worth !== 'number'
+    ) return false;
+  }
 
   // [NEW] 支持 holdings 明細陣列與持股模式欄位校驗
   if (p.holdings !== undefined) {
