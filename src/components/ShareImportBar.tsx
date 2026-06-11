@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import type { AiPortfolioState } from '../context/AppContext';
+import type { AiPortfolioState, Portfolio, AllocationTarget, RetirementConfig, HoldingItem } from '../context/AppContext';
 import {
   encodeStateToUrl,
   buildShareUrl,
@@ -103,7 +103,7 @@ function importStateFromUrl(stateStr: string, importState: (state: AiPortfolioSt
       us_stock: decoded.portfolio?.us_stock ?? 0,
       crypto: decoded.portfolio?.crypto ?? 0,
       history: decoded.portfolio?.history ?? [],
-      holdings: decoded.portfolio?.holdings,
+      holdings: (decoded.portfolio?.holdings as HoldingItem[]) ?? undefined,
       isHoldingMode: decoded.portfolio?.isHoldingMode,
     },
     allocation_target: {

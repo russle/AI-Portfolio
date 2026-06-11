@@ -26,8 +26,6 @@ import {
   ReferenceLine,
   Label
 } from 'recharts';
-import type { TooltipValueType } from 'recharts';
-import type { NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 export const BacktestPage: React.FC = () => {
   const { state } = useApp();
@@ -370,7 +368,7 @@ export const BacktestPage: React.FC = () => {
                       }}
                       itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
                       labelStyle={{ fontSize: '10px', fontWeight: 'extrabold', color: '#94a3b8', marginBottom: '6px' }}
-                      formatter={(value: TooltipValueType, name: NameType) => {
+                      formatter={(value, name) => {
                         if (value === undefined) return ['', name];
                         const formattedVal = formatCurrency(Number(value));
                         if (name === 'portfolioValue') return [formattedVal, '配置組合本利和'];

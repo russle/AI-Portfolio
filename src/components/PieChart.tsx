@@ -7,8 +7,7 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import type { TooltipValueType } from 'recharts';
-import type { NameType, Payload as TooltipPayloadEntry } from 'recharts/types/component/DefaultTooltipContent';
+import type { TooltipPayloadEntry } from 'recharts';
 
 interface PieData {
   name: string;
@@ -84,7 +83,7 @@ export const PieChart: React.FC<PieChartProps> = ({
               padding: '8px 12px'
             }}
             itemStyle={{ fontSize: '11px', fontWeight: 'bold' }}
-            formatter={(value: TooltipValueType, name: NameType, entry: TooltipPayloadEntry) => {
+            formatter={(value, name, entry) => {
               if (value === undefined) return ['', name];
               const pct = entry.payload.percent;
               return [`$${Number(value).toLocaleString()} 元 (${pct.toFixed(1)}%)`, name];

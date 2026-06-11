@@ -9,8 +9,6 @@ import {
   Tooltip,
   Legend
 } from 'recharts';
-import type { TooltipValueType } from 'recharts';
-import type { NameType } from 'recharts/types/component/DefaultTooltipContent';
 
 interface StackedAreaDataPoint {
   date: string;
@@ -96,7 +94,7 @@ export const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
             }}
             itemStyle={{ fontSize: '12px', fontWeight: 'bold', padding: '2px 0' }}
             labelStyle={{ fontSize: '11px', fontWeight: 'black', color: '#94a3b8', marginBottom: '8px', letterSpacing: '0.05em' }}
-            formatter={(value: TooltipValueType, name: NameType) => value !== undefined ? [`$${Number(value).toLocaleString()} 元`, name] : ['', name]}
+            formatter={(value, name) => value !== undefined ? [`$${Number(value).toLocaleString()} 元`, name] : ['', name]}
           />
           
           <Legend 

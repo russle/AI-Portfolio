@@ -357,8 +357,8 @@ export const StressTestPage: React.FC = () => {
                             borderRadius: '12px',
                             fontSize: '12px',
                           }}
-                          formatter={(value: number | undefined) => value !== undefined ? [formatAmount(value), '資產價值'] : ['', '資產價值']}
-                          labelFormatter={(label: number | string) => `第 ${label} 年`}
+                          formatter={(value) => value !== undefined ? [formatAmount(value), '資產價值'] : ['', '資產價值']}
+                          labelFormatter={(label) => `第 ${label} 年`}
                         />
                         <Area
                           type="monotone"
